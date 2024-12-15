@@ -1,0 +1,176 @@
+/* Existing table styles */
+.table-responsive {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.table th {
+    cursor: pointer;
+    position: relative;
+    padding-right: 20px !important;
+}
+
+.table th:hover {
+    background-color: #f8f9fa;
+}
+
+.table th::after {
+    content: '';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+}
+
+.table th.sort-asc::after {
+    border-bottom: 5px solid #333;
+    border-top: none;
+}
+
+.table th.sort-desc::after {
+    border-top: 5px solid #333;
+    border-bottom: none;
+}
+
+.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Make the table more readable */
+.table {
+    font-size: 14px;
+    width: 100%;
+}
+
+.table td, .table th {
+    padding: 8px;
+    white-space: nowrap;
+}
+
+/* Sticky header */
+.table thead th {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 1;
+    border-bottom: 2px solid #dee2e6;
+}
+
+/* Hover effect on rows */
+.table tbody tr:hover {
+    background-color: #f5f5f5;
+}
+
+/* Football pitch styles */
+.pitch-container {
+    position: sticky;
+    top: 20px;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    min-height: 400px;
+}
+
+.football-pitch {
+    background: #2c7d3c;
+    border: 2px solid white;
+    border-radius: 8px;
+    padding: 20px;
+    height: 100%;
+    min-height: 360px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+}
+
+.football-pitch::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: rgba(255,255,255,0.5);
+}
+
+.football-pitch::after {
+    content: '';
+    position: absolute;
+    top: 75%;
+    left: 25%;
+    right: 25%;
+    height: 40%;
+    border: 2px solid rgba(255,255,255,0.5);
+    border-bottom: none;
+}
+
+.player-row {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 10px 0;
+    position: relative;
+    z-index: 1;
+}
+
+.player-position {
+    text-align: center;
+}
+
+.player-circle {
+    width: 30px;
+    height: 30px;
+    background: rgba(200,200,200,0.9);
+    border: 2px solid white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.player-circle:hover {
+    background: rgba(220,220,220,1);
+    transform: scale(1.1);
+}
+
+/* Position specific styles */
+.forwards {
+    margin-bottom: auto;
+}
+
+.midfielders {
+    margin: 20px 0;
+}
+
+.defenders {
+    margin: 20px 0;
+}
+
+.goalkeeper {
+    margin-top: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .pitch-container {
+        margin-top: 20px;
+        position: static;
+        min-height: 300px;
+    }
+    
+    .football-pitch {
+        min-height: 260px;
+    }
+}
