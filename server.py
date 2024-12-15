@@ -426,89 +426,118 @@ PLAYERS_DATA = [
 cache = {
     'last_update': 0,
     'data': None,
-    'cache_duration': 3600  # Cache for 1 hour
+    'cache_duration': 300  # Cache for 5 minutes
 }
 
 def fetch_fpl_data():
     """Fetch data from Fantasy Premier League API with caching"""
     current_time = time.time()
     
-    # Return cached data if it's still valid
-    if cache['data'] is not None and (current_time - cache['last_update']) < cache['cache_duration']:
+    # Return cached data if it's less than 5 minutes old
+    if current_time - cache['last_update'] < 300:  # 5 minutes
         return cache['data']
     
     try:
-        # Fetch bootstrap-static data from FPL API
         response = requests.get('https://fantasy.premierleague.com/api/bootstrap-static/')
         response.raise_for_status()
         data = response.json()
         
-        # Transform the data into our format
-        players = []
-        for player in data['elements']:
-            players.append({
-                'id': player['id'],
-                'first_name': player['first_name'],
-                'second_name': player['second_name'],
-                'team': data['teams'][player['team'] - 1]['name'],
-                'element_type': player['element_type'],
-                'price': player['now_cost'] / 10.0,
-                'total_points': player['total_points'],
-                'form': player['form'],
-                'selected_by_percent': player['selected_by_percent'],
-                'minutes': player['minutes'],
-                'goals_scored': player['goals_scored'],
-                'assists': player['assists'],
-                'clean_sheets': player['clean_sheets'],
-                'goals_conceded': player['goals_conceded'],
-                'yellow_cards': player['yellow_cards'],
-                'red_cards': player['red_cards']
-            })
-        
         # Update cache
-        cache['data'] = players
+        cache['data'] = data['elements']
         cache['last_update'] = current_time
-        return players
         
+        return data['elements']
     except Exception as e:
-        print(f"Error fetching FPL data: {e}")
-        # Return sample data as fallback
-        return PLAYERS_DATA
+        print("Error fetching FPL data:", str(e))
+        return PLAYERS_DATA  # Return sample data as fallback
 
 class RequestHandler(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        parsed_path = urlparse(self.path)
-        
-        if parsed_path.path == '/api/players':
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Accept, Content-Type')
-            self.end_headers()
-            
-            # Fetch live data from FPL API
-            players = fetch_fpl_data()
-            self.wfile.write(json.dumps(players).encode())
-            return
-            
-        return SimpleHTTPRequestHandler.do_GET(self)
-
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Accept, Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
         SimpleHTTPRequestHandler.end_headers(self)
 
+    def do_GET(self):
+        # Parse the path
+        parsed_path = urlparse(self.path)
+        path_parts = parsed_path.path.split('/')
+        
+        # Remove empty strings from path parts
+        path_parts = [p for p in path_parts if p]
+        
+        # Handle API routes
+        if len(path_parts) > 0 and path_parts[0] == 'api':
+            if len(path_parts) == 2 and path_parts[1] == 'players':
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(PLAYERS_DATA).encode())
+                return
+
+            elif len(path_parts) == 3 and path_parts[1] == 'manager':
+                try:
+                    manager_id = int(path_parts[2])
+                    sample_team = {
+                        "picks": [
+                            {"element": 1, "position": 1},  # Haaland
+                            {"element": 2, "position": 2},  # Salah
+                            {"element": 3, "position": 3},  # De Bruyne
+                            {"element": 4, "position": 4},  # Kane
+                            {"element": 5, "position": 5},  # Saka
+                        ]
+                    }
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(sample_team).encode())
+                    return
+                except ValueError:
+                    self.send_error(400, "Invalid manager ID")
+                    return
+
+            elif len(path_parts) == 3 and path_parts[1] == 'gameweek':
+                try:
+                    gameweek = int(path_parts[2])
+                    if gameweek < 1 or gameweek > 38:
+                        self.send_error(400, "Invalid gameweek number")
+                        return
+                    
+                    gameweek_data = []
+                    for player in PLAYERS_DATA:
+                        gameweek_data.append({
+                            "element": player["id"],
+                            "points": player["total_points"] // 3,
+                            "minutes": player["minutes"] // 10,
+                            "goals_scored": player["goals_scored"] // 3,
+                            "assists": player["assists"] // 3,
+                            "clean_sheets": player["clean_sheets"],
+                            "bonus": 1 if player["total_points"] > 100 else 0
+                        })
+                    
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(gameweek_data).encode())
+                    return
+                except ValueError:
+                    self.send_error(400, "Invalid gameweek number")
+                    return
+
+        # Serve static files for non-API routes
+        if path_parts == []:
+            self.path = 'index.html'
+        return SimpleHTTPRequestHandler.do_GET(self)
+
 def run(server_class=HTTPServer, handler_class=RequestHandler, port=8000):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    print(f"Starting server on port {port}...")
+    print("Starting server on port %d..." % port)
     httpd.serve_forever()
 
 if __name__ == '__main__':

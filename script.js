@@ -197,55 +197,39 @@ document.addEventListener('DOMContentLoaded', function() {
         tableBody.innerHTML = '';
         playersToDisplay.forEach(player => {
             const row = document.createElement('tr');
-            row.draggable = true;
-            row.dataset.playerId = player.id;
-            row.dataset.playerData = JSON.stringify(player);
-            
-            const pointsPerMillion = (player.total_points / player.price).toFixed(1);
-            
             row.innerHTML = `
-                <td>${createActionButton(player.id)}</td>
+                <td><button class="btn btn-success btn-sm add-player" data-player-id="${player.id}">Add</button></td>
                 <td>${player.first_name} ${player.second_name}</td>
-                <td>${player.team_name}</td>
                 <td>${positionMap[player.element_type]}</td>
-                <td>£${player.price}m</td>
+                <td>${player.team_name || teamMap[player.team] || 'Unknown'}</td>
+                <td>£${(player.now_cost / 10).toFixed(1)}m</td>
                 <td>${player.total_points}</td>
-                <td>${player.form}</td>
-                <td>${player.selected_by_percent}%</td>
-                <td>${player.minutes}</td>
-                <td>${player.goals_scored}</td>
-                <td>${player.assists}</td>
-                <td>${player.clean_sheets}</td>
-                <td>${player.goals_conceded}</td>
-                <td>${player.yellow_cards}</td>
-                <td>${player.red_cards}</td>
-                <td>${pointsPerMillion}</td>
             `;
-            
-            // Add click handler for the action button
-            const actionBtn = row.querySelector('.action-btn');
-            actionBtn.addEventListener('click', () => {
-                const playerData = JSON.parse(row.dataset.playerData);
-                addPlayerToTeam(playerData);
-            });
-            
             tableBody.appendChild(row);
         });
-        
+
         // Update pagination
         updatePagination(players.length);
         
-        // Update action buttons state
-        updateActionButtons();
+        // Reattach event listeners
+        document.querySelectorAll('.add-player').forEach(button => {
+            button.addEventListener('click', function() {
+                const playerId = parseInt(this.dataset.playerId);
+                const player = players.find(p => p.id === playerId);
+                if (player) {
+                    addPlayerToTeam(player);
+                }
+            });
+        });
     }
 
     function updatePagination(totalPlayers) {
         const totalPages = Math.ceil(totalPlayers / playersPerPage);
-        currentPageSpan.textContent = `Page ${currentPage} of ${totalPages}`;
+        document.getElementById('currentPage').textContent = `Page ${currentPage} of ${totalPages}`;
         
         // Update button states
-        prevPageBtn.disabled = currentPage === 1;
-        nextPageBtn.disabled = currentPage >= totalPages;
+        document.getElementById('prevPage').disabled = currentPage === 1;
+        document.getElementById('nextPage').disabled = currentPage >= totalPages;
     }
 
     function findNextAvailablePosition(positionType) {
@@ -563,7 +547,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function fetchPlayers() {
         try {
             playersTable.classList.add('loading');
-            const response = await fetch('http://localhost:8000/api/players', {
+            const response = await fetch('/api/players', {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json'
@@ -599,6 +583,117 @@ document.addEventListener('DOMContentLoaded', function() {
             playersTable.classList.remove('loading');
         }
     }
+
+    // Manager and gameweek controls
+    const managerIdInput = document.getElementById('managerId');
+    const gameweekInput = document.getElementById('gameweek');
+    const loadDataBtn = document.getElementById('loadData');
+    const loadingSpinner = loadDataBtn.querySelector('.spinner-border');
+
+    async function loadAllData() {
+        const managerId = managerIdInput.value.trim();
+        const gameweek = parseInt(gameweekInput.value);
+
+        // Validate inputs
+        if (!managerId) {
+            alert('Please enter a manager ID');
+            return;
+        }
+        if (gameweek < 1 || gameweek > 38) {
+            alert('Please enter a valid gameweek number (1-38)');
+            return;
+        }
+
+        // Show loading state
+        loadDataBtn.disabled = true;
+        loadingSpinner.classList.remove('d-none');
+        const loadingText = loadDataBtn.textContent;
+        loadDataBtn.textContent = 'Loading...';
+
+        try {
+            console.log(`Fetching gameweek data for week ${gameweek}...`);
+            // Load gameweek data first
+            const gameweekUrl = `/api/gameweek/${gameweek}`;
+            console.log('Gameweek URL:', gameweekUrl);
+            const gameweekResponse = await fetch(gameweekUrl);
+            if (!gameweekResponse.ok) {
+                throw new Error(`HTTP error! status: ${gameweekResponse.status} for ${gameweekUrl}`);
+            }
+            const gameweekData = await gameweekResponse.json();
+            console.log('Gameweek data received:', gameweekData);
+            
+            // Update player stats with gameweek data
+            allPlayers = allPlayers.map(player => {
+                const playerGameweekData = gameweekData.find(d => d.element === player.id);
+                if (playerGameweekData) {
+                    return {
+                        ...player,
+                        gameweek_points: playerGameweekData.points,
+                        minutes: playerGameweekData.minutes,
+                        goals_scored: playerGameweekData.goals_scored,
+                        assists: playerGameweekData.assists,
+                        clean_sheets: playerGameweekData.clean_sheets,
+                        bonus: playerGameweekData.bonus
+                    };
+                }
+                return player;
+            });
+
+            console.log(`Fetching manager data for ID ${managerId}...`);
+            // Load manager's team
+            const managerUrl = `/api/manager/${managerId}`;
+            console.log('Manager URL:', managerUrl);
+            const managerResponse = await fetch(managerUrl);
+            if (!managerResponse.ok) {
+                throw new Error(`HTTP error! status: ${managerResponse.status} for ${managerUrl}`);
+            }
+            const managerData = await managerResponse.json();
+            console.log('Manager data received:', managerData);
+
+            // Clear existing team
+            selectedPlayers.clear();
+            document.querySelectorAll('.player-position').forEach(position => {
+                const circle = position.querySelector('.player-circle');
+                const nameDisplay = position.querySelector('.player-name');
+                circle.textContent = '+';
+                position.classList.remove('occupied');
+                nameDisplay.textContent = '';
+            });
+
+            // Load manager's team
+            managerData.picks.forEach(pick => {
+                const player = allPlayers.find(p => p.id === pick.element);
+                if (player) {
+                    addPlayerToTeam(player);
+                }
+            });
+
+            // Refresh displays
+            filteredPlayers = [...allPlayers];
+            displayPlayers(filteredPlayers, currentPage);
+            updateTeamStats();
+
+            console.log('All data loaded successfully');
+        } catch (error) {
+            console.error('Error loading data:', error);
+            alert('Error loading data. Please check your inputs and try again.');
+        } finally {
+            // Reset loading state
+            loadDataBtn.disabled = false;
+            loadingSpinner.classList.add('d-none');
+            loadDataBtn.textContent = loadingText;
+        }
+    }
+
+    // Event listeners for controls
+    loadDataBtn.addEventListener('click', loadAllData);
+
+    // Input validation
+    gameweekInput.addEventListener('input', function() {
+        let value = parseInt(this.value);
+        if (value < 1) this.value = 1;
+        if (value > 38) this.value = 38;
+    });
 
     // Initialize drag and drop
     initializeDragAndDrop();
