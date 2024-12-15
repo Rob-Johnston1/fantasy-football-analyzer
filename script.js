@@ -13,6 +13,16 @@ document.addEventListener('DOMContentLoaded', function() {
     let isAscending = true; // Track sort direction
     let selectedPlayers = new Map(); // Track selected players by position
     
+    // Team constraints
+    const BUDGET_LIMIT = 100.0;
+    const MAX_PLAYERS_PER_TEAM = 3;
+    const POSITION_LIMITS = {
+        'GK': 2,
+        'DEF': 5,
+        'MID': 5,
+        'FWD': 3
+    };
+    
     // Pagination state
     let currentPage = 1;
     const playersPerPage = 10;
@@ -111,11 +121,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
                 case 'minutes':
                     aValue = parseInt(a.minutes);
-                    bValue = parseInt(b.minutes);
+                    bValue = parseInt(a.minutes);
                     break;
                 case 'goals':
                     aValue = parseInt(a.goals_scored);
-                    bValue = parseInt(b.goals_scored);
+                    bValue = parseInt(a.goals_scored);
                     break;
                 case 'assists':
                     aValue = parseInt(a.assists);
@@ -246,7 +256,66 @@ document.addEventListener('DOMContentLoaded', function() {
         return null;
     }
 
+    function calculateTeamStats() {
+        let totalValue = 0;
+        let teamCounts = {};
+        let positionCounts = {
+            'GK': 0,
+            'DEF': 0,
+            'MID': 0,
+            'FWD': 0
+        };
+
+        selectedPlayers.forEach((player) => {
+            // Calculate total value
+            totalValue += player.price;
+
+            // Count players per team
+            teamCounts[player.team] = (teamCounts[player.team] || 0) + 1;
+
+            // Count players per position
+            const position = positionMap[player.element_type];
+            positionCounts[position]++;
+        });
+
+        return {
+            totalValue,
+            teamCounts,
+            positionCounts
+        };
+    }
+
+    function validateTeamSelection(playerToAdd) {
+        const stats = calculateTeamStats();
+        const playerPosition = positionMap[playerToAdd.element_type];
+        
+        // Check budget limit
+        if (stats.totalValue + playerToAdd.price > BUDGET_LIMIT) {
+            alert(`Cannot add player: Team value would exceed £${BUDGET_LIMIT}m`);
+            return false;
+        }
+
+        // Check team limit
+        if (stats.teamCounts[playerToAdd.team] >= MAX_PLAYERS_PER_TEAM) {
+            alert(`Cannot add player: Maximum of ${MAX_PLAYERS_PER_TEAM} players from the same team allowed`);
+            return false;
+        }
+
+        // Check position limit
+        if (stats.positionCounts[playerPosition] >= POSITION_LIMITS[playerPosition]) {
+            alert(`Cannot add player: Maximum of ${POSITION_LIMITS[playerPosition]} ${playerPosition} players allowed`);
+            return false;
+        }
+
+        return true;
+    }
+
     function addPlayerToTeam(playerData) {
+        // First validate the selection
+        if (!validateTeamSelection(playerData)) {
+            return false;
+        }
+
         const positionType = positionMap[playerData.element_type];
         const nextPosition = findNextAvailablePosition(positionType);
         
@@ -256,55 +325,52 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Get position number from the circle's ID
-        const positionNumber = nextPosition.id.replace('position', '');
-
-        // Update the player circle with player info
-        const playerCircle = nextPosition.querySelector('.player-circle');
-        playerCircle.innerHTML = positionNumber;
-        playerCircle.classList.add('occupied');
-
-        // Add player name below the circle
-        const playerNameElement = nextPosition.querySelector('.player-name');
-        if (playerNameElement) {
-            playerNameElement.textContent = playerData.second_name;
-            playerNameElement.classList.add('visible');
-        }
-
-        // Store the selected player
-        selectedPlayers.set(nextPosition.id, playerData);
+        const positionNumber = nextPosition.id;
         
-        // Update the add/remove button state
+        // Update the circle
+        const circle = nextPosition.querySelector('.player-circle');
+        const nameDisplay = nextPosition.querySelector('.player-name');
+        
+        circle.textContent = playerData.first_name[0] + playerData.second_name[0];
+        nextPosition.classList.add('occupied');
+        nameDisplay.textContent = `${playerData.first_name} ${playerData.second_name}`;
+        
+        // Store the player data
+        selectedPlayers.set(positionNumber, playerData);
+        
+        // Update action buttons and stats
         updateActionButtons();
+        updateTeamStats();
+        
         return true;
     }
 
     function removePlayerFromTeam(playerData) {
-        // Find the position containing this player
-        for (let [positionId, player] of selectedPlayers) {
+        // Find and remove the player
+        let removed = false;
+        selectedPlayers.forEach((player, positionId) => {
             if (player.id === playerData.id) {
+                // Clear the position
                 const position = document.getElementById(positionId);
-                const playerCircle = position.querySelector('.player-circle');
-                const playerNameElement = position.querySelector('.player-name');
+                const circle = position.querySelector('.player-circle');
+                const nameDisplay = position.querySelector('.player-name');
                 
-                // Reset the circle to its original state
-                playerCircle.innerHTML = '+';
-                playerCircle.classList.remove('occupied');
-                
-                // Clear and hide the player name
-                if (playerNameElement) {
-                    playerNameElement.textContent = '';
-                    playerNameElement.classList.remove('visible');
-                }
+                circle.textContent = '+';
+                position.classList.remove('occupied');
+                nameDisplay.textContent = '';
                 
                 // Remove from selected players
                 selectedPlayers.delete(positionId);
-                
-                // Update the add/remove button state
-                updateActionButtons();
-                return true;
+                removed = true;
             }
+        });
+        
+        if (removed) {
+            updateActionButtons();
+            updateTeamStats();
         }
-        return false;
+        
+        return removed;
     }
 
     function updateActionButtons() {
@@ -317,6 +383,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 '<span class="add-btn">+</span>';
             btn.classList.toggle('btn-danger', isInTeam);
             btn.classList.toggle('btn-success', !isInTeam);
+        });
+    }
+
+    function updateTeamStats() {
+        const stats = calculateTeamStats();
+        
+        // Update team value
+        document.getElementById('teamValue').textContent = `£${stats.totalValue.toFixed(1)}m`;
+        
+        // Update position counts
+        document.getElementById('gkCount').textContent = `${stats.positionCounts.GK}/2 GK`;
+        document.getElementById('defCount').textContent = `${stats.positionCounts.DEF}/5 DEF`;
+        document.getElementById('midCount').textContent = `${stats.positionCounts.MID}/5 MID`;
+        document.getElementById('fwdCount').textContent = `${stats.positionCounts.FWD}/3 FWD`;
+        
+        // Update stat colors based on limits
+        const valueElement = document.getElementById('teamValue');
+        valueElement.style.backgroundColor = stats.totalValue > BUDGET_LIMIT ? 'rgba(220, 53, 69, 0.2)' : 'rgba(76, 175, 80, 0.2)';
+        
+        Object.entries(stats.positionCounts).forEach(([position, count]) => {
+            const element = document.getElementById(`${position.toLowerCase()}Count`);
+            if (element) {
+                element.style.backgroundColor = count > POSITION_LIMITS[position] ? 'rgba(220, 53, 69, 0.2)' : 'rgba(76, 175, 80, 0.2)';
+            }
         });
     }
 
@@ -387,8 +477,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
         selectedPlayers.set(dropTarget.id, playerData);
         updateActionButtons();
+        updateTeamStats();
 
         document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+    }
+
+    function initializePlayerPositions() {
+        // Add click handlers to all player positions
+        document.querySelectorAll('.player-position').forEach(position => {
+            const circle = position.querySelector('.player-circle');
+            circle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const player = selectedPlayers.get(position.id);
+                if (player) {
+                    if (confirm(`Remove ${player.first_name} ${player.second_name} from your team?`)) {
+                        removePlayerFromTeam(player);
+                    }
+                }
+            });
+        });
     }
 
     // Pagination event listeners
@@ -439,6 +546,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize drag and drop
     initializeDragAndDrop();
+    
+    // Initialize player positions
+    initializePlayerPositions();
     
     // Automatically fetch players on page load
     fetchPlayers();
