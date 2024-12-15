@@ -197,13 +197,14 @@ document.addEventListener('DOMContentLoaded', function() {
         tableBody.innerHTML = '';
         playersToDisplay.forEach(player => {
             const row = document.createElement('tr');
+            const captainStatus = player.is_captain ? '(C) ' : player.is_vice_captain ? '(VC) ' : '';
             row.innerHTML = `
                 <td><button class="btn btn-success btn-sm add-player" data-player-id="${player.id}">Add</button></td>
-                <td>${player.first_name} ${player.second_name}</td>
+                <td>${captainStatus}${player.first_name} ${player.second_name}</td>
                 <td>${positionMap[player.element_type]}</td>
                 <td>${player.team_name || teamMap[player.team] || 'Unknown'}</td>
                 <td>£${(player.now_cost / 10).toFixed(1)}m</td>
-                <td>${player.total_points}</td>
+                <td>${player.total_points} (${player.gameweek_points || 0})</td>
             `;
             tableBody.appendChild(row);
         });
@@ -613,7 +614,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             console.log(`Fetching gameweek data for week ${gameweek}...`);
             // Load gameweek data first
-            const gameweekUrl = `/api/gameweek/${gameweek}`;
+            const gameweekUrl = `/api/gameweek/${gameweek}?manager_id=${managerId}`;
             console.log('Gameweek URL:', gameweekUrl);
             const gameweekResponse = await fetch(gameweekUrl);
             if (!gameweekResponse.ok) {
@@ -624,19 +625,23 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Update player stats with gameweek data
             allPlayers = allPlayers.map(player => {
-                const playerGameweekData = gameweekData.find(d => d.element === player.id);
+                const playerGameweekData = gameweekData.picks?.find(p => p.element === player.id);
                 if (playerGameweekData) {
                     return {
                         ...player,
-                        gameweek_points: playerGameweekData.points,
-                        minutes: playerGameweekData.minutes,
-                        goals_scored: playerGameweekData.goals_scored,
-                        assists: playerGameweekData.assists,
-                        clean_sheets: playerGameweekData.clean_sheets,
-                        bonus: playerGameweekData.bonus
+                        gameweek_points: playerGameweekData.points || 0,
+                        is_captain: playerGameweekData.is_captain || false,
+                        is_vice_captain: playerGameweekData.is_vice_captain || false,
+                        multiplier: playerGameweekData.multiplier || 1
                     };
                 }
-                return player;
+                return {
+                    ...player,
+                    gameweek_points: 0,
+                    is_captain: false,
+                    is_vice_captain: false,
+                    multiplier: 1
+                };
             });
 
             console.log(`Fetching manager data for ID ${managerId}...`);
