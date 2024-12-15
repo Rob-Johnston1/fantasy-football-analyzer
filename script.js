@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', function() {
-    const fetchButton = document.getElementById('fetchPlayers');
     const playersTable = document.getElementById('playersTable');
     const playersTableBody = document.getElementById('playersTableBody');
     const prevPageBtn = document.getElementById('prevPage');
@@ -40,8 +39,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (index === 0) return;
         
         headerCell.addEventListener('click', () => {
-            const columnIndex = headerCell.cellIndex;
-            const columnName = headerCell.textContent.toLowerCase();
+            const columnName = headerCell.textContent.toLowerCase().trim();
             
             // Toggle sort direction if clicking the same column
             if (currentSortColumn === columnName) {
@@ -50,18 +48,171 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentSortColumn = columnName;
                 isAscending = true;
             }
-
-            // Remove sort indicators from all headers
+            
+            // Remove sort classes from all headers
             document.querySelectorAll('#playersTable th').forEach(th => {
                 th.classList.remove('sort-asc', 'sort-desc');
             });
-
-            // Add sort indicator to current header
+            
+            // Add sort class to current header
             headerCell.classList.add(isAscending ? 'sort-asc' : 'sort-desc');
-
-            sortTable(columnIndex, columnName);
+            
+            // Sort the entire players array
+            sortTable(columnName);
+            
+            // Reset to first page after sorting
+            currentPage = 1;
+            
+            // Update table with sorted data
+            updateTable(players);
         });
     });
+
+    function sortTable(columnName) {
+        players.sort((a, b) => {
+            let aValue, bValue;
+            
+            switch(columnName) {
+                case 'id':
+                    aValue = parseInt(a.id);
+                    bValue = parseInt(b.id);
+                    break;
+                case 'name':
+                    aValue = `${a.first_name} ${a.second_name}`;
+                    bValue = `${b.first_name} ${b.second_name}`;
+                    break;
+                case 'team':
+                    aValue = a.team;
+                    bValue = b.team;
+                    break;
+                case 'position':
+                    aValue = positionMap[a.element_type];
+                    bValue = positionMap[b.element_type];
+                    break;
+                case 'price':
+                    aValue = parseFloat(a.price);
+                    bValue = parseFloat(b.price);
+                    break;
+                case 'total points':
+                    aValue = parseInt(a.total_points);
+                    bValue = parseInt(b.total_points);
+                    break;
+                case 'points/£m':
+                    aValue = parseFloat(a.total_points) / parseFloat(a.price);
+                    bValue = parseFloat(b.total_points) / parseFloat(b.price);
+                    break;
+                case 'form':
+                    aValue = parseFloat(a.form);
+                    bValue = parseFloat(b.form);
+                    break;
+                case 'selected by':
+                    aValue = parseFloat(a.selected_by_percent);
+                    bValue = parseFloat(b.selected_by_percent);
+                    break;
+                case 'minutes':
+                    aValue = parseInt(a.minutes);
+                    bValue = parseInt(b.minutes);
+                    break;
+                case 'goals':
+                    aValue = parseInt(a.goals_scored);
+                    bValue = parseInt(b.goals_scored);
+                    break;
+                case 'assists':
+                    aValue = parseInt(a.assists);
+                    bValue = parseInt(a.assists);
+                    break;
+                case 'clean sheets':
+                    aValue = parseInt(a.clean_sheets);
+                    bValue = parseInt(a.clean_sheets);
+                    break;
+                case 'goals conceded':
+                    aValue = parseInt(a.goals_conceded);
+                    bValue = parseInt(a.goals_conceded);
+                    break;
+                case 'yellow cards':
+                    aValue = parseInt(a.yellow_cards);
+                    bValue = parseInt(a.yellow_cards);
+                    break;
+                case 'red cards':
+                    aValue = parseInt(a.red_cards);
+                    bValue = parseInt(a.red_cards);
+                    break;
+                default:
+                    console.warn('Unknown column:', columnName);
+                    return 0;
+            }
+            
+            if (aValue === null || aValue === undefined) return 1;
+            if (bValue === null || bValue === undefined) return -1;
+            
+            if (typeof aValue === 'number' && typeof bValue === 'number') {
+                return isAscending ? aValue - bValue : bValue - aValue;
+            } else {
+                return isAscending ? 
+                    aValue.toString().localeCompare(bValue.toString()) : 
+                    bValue.toString().localeCompare(aValue.toString());
+            }
+        });
+    }
+
+    function updateTable(playersData) {
+        playersTableBody.innerHTML = '';
+        
+        // Calculate pagination values
+        const start = (currentPage - 1) * playersPerPage;
+        const end = start + playersPerPage;
+        const pageData = playersData.slice(start, end);
+        
+        // Update pagination info
+        startRangeSpan.textContent = start + 1;
+        endRangeSpan.textContent = Math.min(end, playersData.length);
+        totalPlayersSpan.textContent = playersData.length;
+        
+        // Update pagination buttons
+        prevPageBtn.disabled = currentPage === 1;
+        nextPageBtn.disabled = end >= playersData.length;
+        
+        // Render table rows for current page
+        pageData.forEach(player => {
+            const row = document.createElement('tr');
+            row.draggable = true;
+            row.dataset.playerId = player.id;
+            row.dataset.playerData = JSON.stringify(player);
+            
+            const pointsPerMillion = (player.total_points / player.price).toFixed(1);
+            
+            row.innerHTML = `
+                <td>${createActionButton(player.id)}</td>
+                <td>${player.first_name} ${player.second_name}</td>
+                <td>${player.team}</td>
+                <td>${positionMap[player.element_type]}</td>
+                <td>£${player.price}m</td>
+                <td>${player.total_points}</td>
+                <td>${player.form}</td>
+                <td>${player.selected_by_percent}%</td>
+                <td>${player.minutes}</td>
+                <td>${player.goals_scored}</td>
+                <td>${player.assists}</td>
+                <td>${player.clean_sheets}</td>
+                <td>${player.goals_conceded}</td>
+                <td>${player.yellow_cards}</td>
+                <td>${player.red_cards}</td>
+                <td>${pointsPerMillion}</td>
+            `;
+            
+            // Add click handler for the action button
+            const actionBtn = row.querySelector('.action-btn');
+            actionBtn.addEventListener('click', () => {
+                const playerData = JSON.parse(row.dataset.playerData);
+                addPlayerToTeam(playerData);
+            });
+            
+            playersTableBody.appendChild(row);
+        });
+        
+        // Update action buttons state
+        updateActionButtons();
+    }
 
     function findNextAvailablePosition(positionType) {
         // For substitutes (position "ANY"), accept any position type
@@ -240,125 +391,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
     }
 
-    function sortTable(columnIndex, columnName) {
-        const sortedPlayers = [...players].sort((a, b) => {
-            let aValue, bValue;
-
-            // Define how to get values based on column name
-            switch(columnName) {
-                case 'id':
-                    return compareValues(a.id, b.id);
-                case 'name':
-                    aValue = `${a.first_name} ${a.second_name}`;
-                    bValue = `${b.first_name} ${b.second_name}`;
-                    return compareValues(aValue, bValue);
-                case 'team':
-                    return compareValues(a.team, b.team);
-                case 'position':
-                    return compareValues(a.element_type, b.element_type);
-                case 'price':
-                    return compareValues(a.price, b.price);
-                case 'total points':
-                    return compareValues(a.total_points, b.total_points);
-                case 'points per £1m':
-                    aValue = (a.total_points / a.price).toFixed(2);
-                    bValue = (b.total_points / b.price).toFixed(2);
-                    return compareValues(parseFloat(aValue), parseFloat(bValue));
-                case 'form':
-                    return compareValues(parseFloat(a.form), parseFloat(b.form));
-                case 'selected by':
-                    return compareValues(parseFloat(a.selected_by_percent), parseFloat(b.selected_by_percent));
-                case 'minutes':
-                    return compareValues(a.minutes, b.minutes);
-                case 'goals':
-                    return compareValues(a.goals_scored, b.goals_scored);
-                case 'assists':
-                    return compareValues(a.assists, b.assists);
-                case 'clean sheets':
-                    return compareValues(a.clean_sheets, b.clean_sheets);
-                case 'goals conceded':
-                    return compareValues(a.goals_conceded, b.goals_conceded);
-                case 'yellow cards':
-                    return compareValues(a.yellow_cards, b.yellow_cards);
-                case 'red cards':
-                    return compareValues(a.red_cards, b.red_cards);
-                default:
-                    return 0;
-            }
-        });
-
-        // Reverse if descending order
-        if (!isAscending) {
-            sortedPlayers.reverse();
-        }
-
-        // Update the table with sorted data
-        updateTable(sortedPlayers);
-    }
-
-    function compareValues(a, b) {
-        if (a === b) return 0;
-        return a < b ? -1 : 1;
-    }
-
-    function updateTable(playersData) {
-        playersTableBody.innerHTML = '';
-        
-        const startIndex = (currentPage - 1) * playersPerPage;
-        const endIndex = Math.min(startIndex + playersPerPage, playersData.length);
-        const displayedPlayers = playersData.slice(startIndex, endIndex);
-        
-        displayedPlayers.forEach((player, index) => {
-            const row = document.createElement('tr');
-            row.dataset.index = startIndex + index;
-            
-            const price = player.price;
-            const pointsPerMillion = (player.total_points / price).toFixed(1);
-            
-            const actionButtonHtml = createActionButton(player.id);
-            
-            row.innerHTML = `
-                <td>${actionButtonHtml}</td>
-                <td>${player.id}</td>
-                <td>${player.first_name} ${player.second_name}</td>
-                <td>${player.team}</td>
-                <td>${positionMap[player.element_type]}</td>
-                <td>£${price.toFixed(1)}m</td>
-                <td>${player.total_points}</td>
-                <td>${pointsPerMillion}</td>
-                <td>${player.form}</td>
-                <td>${player.selected_by_percent}%</td>
-                <td>${player.minutes}</td>
-                <td>${player.goals_scored}</td>
-                <td>${player.assists}</td>
-                <td>${player.clean_sheets}</td>
-                <td>${player.goals_conceded}</td>
-                <td>${player.yellow_cards}</td>
-                <td>${player.red_cards}</td>
-            `;
-            
-            playersTableBody.appendChild(row);
-
-            // Add click handler for the action button
-            const actionBtn = row.querySelector('.action-btn');
-            if (actionBtn) {
-                actionBtn.addEventListener('click', (e) => handleActionClick(e, player));
-            }
-        });
-
-        // Update pagination info
-        startRangeSpan.textContent = startIndex + 1;
-        endRangeSpan.textContent = endIndex;
-        totalPlayersSpan.textContent = playersData.length;
-        currentPageSpan.textContent = `Page ${currentPage}`;
-        
-        // Update pagination buttons
-        prevPageBtn.disabled = currentPage === 1;
-        nextPageBtn.disabled = endIndex >= playersData.length;
-        
-        initializeDragAndDrop();
-    }
-
     // Pagination event listeners
     prevPageBtn.addEventListener('click', () => {
         if (currentPage > 1) {
@@ -378,11 +410,25 @@ document.addEventListener('DOMContentLoaded', function() {
     async function fetchPlayers() {
         try {
             playersTable.classList.add('loading');
+            const response = await fetch('http://localhost:8000/api/players', {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
             
-            const response = await fetch('http://localhost:8000/api/players');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             players = await response.json();
             
+            if (!Array.isArray(players) || players.length === 0) {
+                throw new Error('No players data received');
+            }
+            
             updateTable(players);
+            console.log('Players fetched successfully:', players.length);
         } catch (error) {
             console.error('Error fetching players:', error);
             alert('Error fetching players. Please try again.');
@@ -391,9 +437,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Fetch players automatically on page load
+    // Initialize drag and drop
+    initializeDragAndDrop();
+    
+    // Automatically fetch players on page load
     fetchPlayers();
-
-    // Keep the button for manual refresh
-    fetchButton.addEventListener('click', fetchPlayers);
 });

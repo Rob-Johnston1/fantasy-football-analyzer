@@ -9,16 +9,13 @@
 </head>
 <body class="dark-theme">
     <div class="container-fluid">
-        <!-- Header Row -->
-        <div class="row mb-4">
-            <div class="col-12 text-center">
-                <h1 class="mt-4">Fantasy Football Analyzer</h1>
-                <button id="fetchPlayers" class="btn btn-primary mt-3">Fetch Players</button>
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center mb-4">Fantasy Football Analyzer</h1>
             </div>
         </div>
 
-        <!-- Pitch Row -->
-        <div class="row mb-4">
+        <div class="row">
             <div class="col-12">
                 <div class="pitch-container">
                     <div class="football-pitch">
@@ -78,52 +75,46 @@
             </div>
         </div>
 
-        <!-- Substitutes Row -->
-        <div class="row mb-4">
+        <div class="row">
             <div class="col-12">
                 <div class="substitutes-outer">
-                    <div class="substitutes-section">
-                        <div class="substitutes-label">Substitutes</div>
-                        <div class="substitutes-container">
-                            <!-- Substitute Goalkeeper -->
-                            <div id="position12" class="player-position substitute" data-position="GK">
-                                <div class="player-circle">+</div>
-                                <div class="player-name"></div>
-                            </div>
-                            <!-- Other Substitutes -->
-                            <div id="position13" class="player-position substitute" data-position="ANY">
-                                <div class="player-circle">+</div>
-                                <div class="player-name"></div>
-                            </div>
-                            <div id="position14" class="player-position substitute" data-position="ANY">
-                                <div class="player-circle">+</div>
-                                <div class="player-name"></div>
-                            </div>
-                            <div id="position15" class="player-position substitute" data-position="ANY">
-                                <div class="player-circle">+</div>
-                                <div class="player-name"></div>
-                            </div>
+                    <div class="substitutes-label">Substitutes</div>
+                    <div class="substitutes-container">
+                        <!-- Substitute Goalkeeper -->
+                        <div id="position12" class="player-position substitute" data-position="GK">
+                            <div class="player-circle">+</div>
+                            <div class="player-name"></div>
+                        </div>
+                        <!-- Other Substitutes -->
+                        <div id="position13" class="player-position substitute" data-position="ANY">
+                            <div class="player-circle">+</div>
+                            <div class="player-name"></div>
+                        </div>
+                        <div id="position14" class="player-position substitute" data-position="ANY">
+                            <div class="player-circle">+</div>
+                            <div class="player-name"></div>
+                        </div>
+                        <div id="position15" class="player-position substitute" data-position="ANY">
+                            <div class="player-circle">+</div>
+                            <div class="player-name"></div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Table Row -->
         <div class="row">
             <div class="col-12">
                 <div class="table-responsive">
-                    <table id="playersTable" class="table">
+                    <table id="playersTable" class="table table-dark">
                         <thead>
                             <tr>
                                 <th>Actions</th>
-                                <th>ID</th>
                                 <th>Name</th>
                                 <th>Team</th>
                                 <th>Position</th>
                                 <th>Price</th>
                                 <th>Total Points</th>
-                                <th>Points/£m</th>
                                 <th>Form</th>
                                 <th>Selected By</th>
                                 <th>Minutes</th>
@@ -133,19 +124,19 @@
                                 <th>Goals Conceded</th>
                                 <th>Yellow Cards</th>
                                 <th>Red Cards</th>
+                                <th>Points/£m</th>
                             </tr>
                         </thead>
                         <tbody id="playersTableBody"></tbody>
                     </table>
-                    <div class="pagination-container">
-                        <div class="pagination-info">
-                            Showing <span id="startRange">0</span>-<span id="endRange">0</span> of <span id="totalPlayers">0</span> players
-                        </div>
-                        <div class="pagination-controls">
-                            <button id="prevPage" class="btn btn-secondary" disabled>&lt; Previous</button>
-                            <span id="currentPage" class="mx-3">Page 1</span>
-                            <button id="nextPage" class="btn btn-secondary">Next &gt;</button>
-                        </div>
+                </div>
+                <div class="pagination-container">
+                    <div class="pagination-info">
+                        Showing <span id="startRange">1</span>-<span id="endRange">10</span> of <span id="totalPlayers">0</span> players
+                    </div>
+                    <div class="pagination-controls">
+                        <button id="prevPage" class="btn btn-secondary" disabled>&lt; Previous</button>
+                        <button id="nextPage" class="btn btn-secondary">Next &gt;</button>
                     </div>
                 </div>
             </div>
