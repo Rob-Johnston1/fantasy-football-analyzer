@@ -266,6 +266,38 @@ body {
     font-size: 0.9em;
 }
 
+/* Search bar */
+.search-container {
+    padding: 15px;
+    background: rgba(45, 45, 45, 0.9);
+    border-radius: 8px 8px 0 0;
+    border: 2px solid #ffffff;
+    border-bottom: none;
+}
+
+.input-group-text {
+    background-color: #4d4d4d;
+    border-color: #6c757d;
+    color: #ffffff;
+}
+
+.form-control {
+    background-color: #2d2d2d;
+    border-color: #6c757d;
+    color: #ffffff;
+}
+
+.form-control:focus {
+    background-color: #2d2d2d;
+    border-color: #4CAF50;
+    color: #ffffff;
+    box-shadow: 0 0 0 0.25rem rgba(76, 175, 80, 0.25);
+}
+
+.form-control::placeholder {
+    color: #999999;
+}
+
 /* Mobile adjustments */
 @media (max-width: 768px) {
     .pitch-container {

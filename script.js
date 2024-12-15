@@ -8,10 +8,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const endRangeSpan = document.getElementById('endRange');
     const totalPlayersSpan = document.getElementById('totalPlayers');
     
-    let players = []; // Store players data globally
+    let allPlayers = []; // Store all players
+    let filteredPlayers = []; // Store filtered players
     let currentSortColumn = ''; // Track current sort column
     let isAscending = true; // Track sort direction
     let selectedPlayers = new Map(); // Track selected players by position
+    let currentPage = 1;
+    const playersPerPage = 10;
     
     // Team constraints
     const BUDGET_LIMIT = 100.0;
@@ -23,16 +26,36 @@ document.addEventListener('DOMContentLoaded', function() {
         'FWD': 3
     };
     
-    // Pagination state
-    let currentPage = 1;
-    const playersPerPage = 10;
-    
     // Position mapping
     const positionMap = {
         1: 'GK',
         2: 'DEF',
         3: 'MID',
         4: 'FWD'
+    };
+
+    // Team mapping
+    const teamMap = {
+        1: 'Arsenal',
+        2: 'Aston Villa',
+        3: 'Bournemouth',
+        4: 'Brentford',
+        5: 'Brighton',
+        6: 'Burnley',
+        7: 'Chelsea',
+        8: 'Crystal Palace',
+        9: 'Everton',
+        10: 'Fulham',
+        11: 'Liverpool',
+        12: 'Luton',
+        13: 'Man City',
+        14: 'Man Utd',
+        15: 'Newcastle',
+        16: 'Nott\'m Forest',
+        17: 'Sheffield Utd',
+        18: 'Spurs',
+        19: 'West Ham',
+        20: 'Wolves'
     };
 
     function createActionButton(playerId) {
@@ -74,12 +97,12 @@ document.addEventListener('DOMContentLoaded', function() {
             currentPage = 1;
             
             // Update table with sorted data
-            updateTable(players);
+            displayPlayers(filteredPlayers, currentPage);
         });
     });
 
     function sortTable(columnName) {
-        players.sort((a, b) => {
+        filteredPlayers.sort((a, b) => {
             let aValue, bValue;
             
             switch(columnName) {
@@ -113,11 +136,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
                 case 'form':
                     aValue = parseFloat(a.form);
-                    bValue = parseFloat(b.form);
+                    bValue = parseFloat(a.form);
                     break;
                 case 'selected by':
                     aValue = parseFloat(a.selected_by_percent);
-                    bValue = parseFloat(b.selected_by_percent);
+                    bValue = parseFloat(a.selected_by_percent);
                     break;
                 case 'minutes':
                     aValue = parseInt(a.minutes);
@@ -165,25 +188,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function updateTable(playersData) {
-        playersTableBody.innerHTML = '';
-        
-        // Calculate pagination values
-        const start = (currentPage - 1) * playersPerPage;
+    function displayPlayers(players, page = 1) {
+        const start = (page - 1) * playersPerPage;
         const end = start + playersPerPage;
-        const pageData = playersData.slice(start, end);
+        const playersToDisplay = players.slice(start, end);
+        const tableBody = document.querySelector('#playersTable tbody');
         
-        // Update pagination info
-        startRangeSpan.textContent = start + 1;
-        endRangeSpan.textContent = Math.min(end, playersData.length);
-        totalPlayersSpan.textContent = playersData.length;
-        
-        // Update pagination buttons
-        prevPageBtn.disabled = currentPage === 1;
-        nextPageBtn.disabled = end >= playersData.length;
-        
-        // Render table rows for current page
-        pageData.forEach(player => {
+        tableBody.innerHTML = '';
+        playersToDisplay.forEach(player => {
             const row = document.createElement('tr');
             row.draggable = true;
             row.dataset.playerId = player.id;
@@ -194,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function() {
             row.innerHTML = `
                 <td>${createActionButton(player.id)}</td>
                 <td>${player.first_name} ${player.second_name}</td>
-                <td>${player.team}</td>
+                <td>${player.team_name}</td>
                 <td>${positionMap[player.element_type]}</td>
                 <td>£${player.price}m</td>
                 <td>${player.total_points}</td>
@@ -217,11 +229,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 addPlayerToTeam(playerData);
             });
             
-            playersTableBody.appendChild(row);
+            tableBody.appendChild(row);
         });
+        
+        // Update pagination
+        updatePagination(players.length);
         
         // Update action buttons state
         updateActionButtons();
+    }
+
+    function updatePagination(totalPlayers) {
+        const totalPages = Math.ceil(totalPlayers / playersPerPage);
+        currentPageSpan.textContent = `Page ${currentPage} of ${totalPages}`;
+        
+        // Update button states
+        prevPageBtn.disabled = currentPage === 1;
+        nextPageBtn.disabled = currentPage >= totalPages;
     }
 
     function findNextAvailablePosition(positionType) {
@@ -436,7 +460,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleDragStart(e) {
-        const playerData = players[e.target.dataset.index];
+        const playerData = filteredPlayers[e.target.dataset.index];
         e.dataTransfer.setData('text/plain', JSON.stringify(playerData));
         e.target.classList.add('dragging');
     }
@@ -498,19 +522,41 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    function initializeSearch() {
+        const searchInput = document.getElementById('playerSearch');
+        searchInput.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            
+            // Filter all players
+            if (searchTerm === '') {
+                filteredPlayers = [...allPlayers];
+            } else {
+                filteredPlayers = allPlayers.filter(player => 
+                    `${player.first_name} ${player.second_name}`.toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            // Reset to first page when searching
+            currentPage = 1;
+            
+            // Display filtered results
+            displayPlayers(filteredPlayers, currentPage);
+        });
+    }
+
     // Pagination event listeners
     prevPageBtn.addEventListener('click', () => {
         if (currentPage > 1) {
             currentPage--;
-            updateTable(players);
+            displayPlayers(filteredPlayers, currentPage);
         }
     });
 
     nextPageBtn.addEventListener('click', () => {
-        const maxPage = Math.ceil(players.length / playersPerPage);
-        if (currentPage < maxPage) {
+        const totalPages = Math.ceil(filteredPlayers.length / playersPerPage);
+        if (currentPage < totalPages) {
             currentPage++;
-            updateTable(players);
+            displayPlayers(filteredPlayers, currentPage);
         }
     });
 
@@ -528,17 +574,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
-            players = await response.json();
+            const data = await response.json();
             
-            if (!Array.isArray(players) || players.length === 0) {
-                throw new Error('No players data received');
+            // Store all players
+            allPlayers = data.map(player => ({
+                ...player,
+                team_name: teamMap[player.team] || `Team ${player.team}`
+            }));
+            
+            if (!Array.isArray(allPlayers) || allPlayers.length === 0) {
+                console.warn('No players data received');
+                return;
             }
             
-            updateTable(players);
-            console.log('Players fetched successfully:', players.length);
+            // Initialize filtered players with all players
+            filteredPlayers = [...allPlayers];
+            
+            // Display first page
+            displayPlayers(filteredPlayers, currentPage);
+            console.log('Players fetched successfully:', allPlayers.length);
         } catch (error) {
             console.error('Error fetching players:', error);
-            alert('Error fetching players. Please try again.');
         } finally {
             playersTable.classList.remove('loading');
         }
@@ -549,6 +605,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize player positions
     initializePlayerPositions();
+    
+    // Initialize search functionality
+    initializeSearch();
     
     // Automatically fetch players on page load
     fetchPlayers();
