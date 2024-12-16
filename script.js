@@ -26,12 +26,19 @@ document.addEventListener('DOMContentLoaded', function() {
         'FWD': 3
     };
     
-    // Position mapping
+    // Position mapping and order
     const positionMap = {
         1: 'GK',
         2: 'DEF',
         3: 'MID',
         4: 'FWD'
+    };
+
+    const positionOrder = {
+        1: 1, // GK
+        2: 2, // DEF
+        3: 3, // MID
+        4: 4  // FWD
     };
 
     // Team mapping - We'll update this dynamically from the API
@@ -405,12 +412,12 @@ document.addEventListener('DOMContentLoaded', function() {
         currentTeamTableBody.innerHTML = '';
 
         // Sort players by position (GK -> DEF -> MID -> FWD)
-        const positionOrder = { 1: 1, 2: 2, 3: 3, 4: 4 }; // Using element_type numbers
         const sortedPlayers = Array.from(selectedPlayers.values()).sort((a, b) => {
             return positionOrder[a.element_type] - positionOrder[b.element_type];
         });
 
-        sortedPlayers.forEach(player => {
+        sortedPlayers.forEach((player, index) => {
+            // Create main row
             const row = document.createElement('tr');
             const position = positionMap[player.element_type] || 'Unknown';
             
@@ -423,6 +430,13 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             row.innerHTML = `
+                <td>
+                    <div class="expand-button">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                        </svg>
+                    </div>
+                </td>
                 <td>${position}</td>
                 <td class="captain-cell">${player.web_name || player.name}${captainBadge}</td>
                 <td>${player.team_name || teamMap[player.team] || 'Unknown'}</td>
@@ -431,6 +445,64 @@ document.addEventListener('DOMContentLoaded', function() {
                 <td>${player.form || '0.0'}</td>
             `;
             currentTeamTableBody.appendChild(row);
+
+            // Create details row
+            const detailsRow = document.createElement('tr');
+            detailsRow.className = 'details-row';
+            detailsRow.innerHTML = `
+                <td colspan="7">
+                    <div class="details-content">
+                        <div class="details-grid">
+                            <div class="detail-item">
+                                <div class="detail-label">Selected By</div>
+                                <div class="detail-value">${player.selected_by_percent || '0'}%</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Minutes Played</div>
+                                <div class="detail-value">${player.minutes || 0}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Goals Scored</div>
+                                <div class="detail-value">${player.goals_scored || 0}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Assists</div>
+                                <div class="detail-value">${player.assists || 0}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Clean Sheets</div>
+                                <div class="detail-value">${player.clean_sheets || 0}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Bonus Points</div>
+                                <div class="detail-value">${player.bonus || 0}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">ICT Index</div>
+                                <div class="detail-value">${player.ict_index || '0.0'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Price Change</div>
+                                <div class="detail-value" style="color: ${(player.cost_change_start || 0) >= 0 ? '#4CAF50' : '#f44336'}">
+                                    ${(player.cost_change_start || 0) / 10}m
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Next Fixture</div>
+                                <div class="detail-value">${player.next_fixture || 'Unknown'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            `;
+            currentTeamTableBody.appendChild(detailsRow);
+
+            // Add click handler to expand button
+            const expandButton = row.querySelector('.expand-button');
+            expandButton.addEventListener('click', () => {
+                expandButton.classList.toggle('expanded');
+                detailsRow.classList.toggle('visible');
+            });
         });
     }
 
@@ -564,34 +636,50 @@ document.addEventListener('DOMContentLoaded', function() {
     async function fetchPlayers() {
         try {
             playersTable.classList.add('loading');
-            const response = await fetch('/api/players', {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            // Fetch both players and fixtures data
+            const [playersResponse, fixturesResponse] = await Promise.all([
+                fetch('/api/players', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                }),
+                fetch('/api/fixtures', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                })
+            ]);
+            
+            if (!playersResponse.ok) {
+                throw new Error(`HTTP error! status: ${playersResponse.status}`);
+            }
+            if (!fixturesResponse.ok) {
+                throw new Error(`HTTP error! status: ${fixturesResponse.status}`);
             }
             
-            const data = await response.json();
+            const [playersData, fixturesData] = await Promise.all([
+                playersResponse.json(),
+                fixturesResponse.json()
+            ]);
             
             // Update team mapping from API data
-            if (data.teams) {
+            if (playersData.teams) {
                 teamMap = {};
-                data.teams.forEach(team => {
+                playersData.teams.forEach(team => {
                     teamMap[team.id] = team.name;
                 });
             }
             
-            allPlayers = data.elements;
+            allPlayers = playersData.elements;
             
-            // Add team names to player data
-            allPlayers = allPlayers.map(player => ({
-                ...player,
-                team_name: teamMap[player.team] || 'Unknown'
-            }));
+            // Add team names and next fixture to player data
+            allPlayers = allPlayers.map(player => {
+                const nextFixture = fixturesData.team_next_fixtures[player.team];
+                return {
+                    ...player,
+                    team_name: teamMap[player.team] || 'Unknown',
+                    next_fixture: nextFixture ? nextFixture.formatted_fixture : 'No upcoming fixture'
+                };
+            });
             
             if (!Array.isArray(allPlayers) || allPlayers.length === 0) {
                 console.warn('No players data received');
@@ -638,8 +726,13 @@ document.addEventListener('DOMContentLoaded', function() {
         loadDataBtn.textContent = 'Loading...';
 
         try {
+            // Make sure we have player data first
+            if (!allPlayers || allPlayers.length === 0) {
+                await fetchPlayers();
+            }
+
             console.log(`Fetching gameweek data for week ${gameweek}...`);
-            // Load gameweek data first
+            // Load gameweek data
             const gameweekUrl = `/api/gameweek/${gameweek}?manager_id=${managerId}`;
             console.log('Gameweek URL:', gameweekUrl);
             const gameweekResponse = await fetch(gameweekUrl);
@@ -658,7 +751,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         gameweek_points: playerGameweekData.points || 0,
                         is_captain: playerGameweekData.is_captain || false,
                         is_vice_captain: playerGameweekData.is_vice_captain || false,
-                        multiplier: playerGameweekData.multiplier || 1
+                        multiplier: playerGameweekData.multiplier || 1,
+                        position_number: playerGameweekData.position
                     };
                 }
                 return {
@@ -666,20 +760,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     gameweek_points: 0,
                     is_captain: false,
                     is_vice_captain: false,
-                    multiplier: 1
+                    multiplier: 1,
+                    position_number: null
                 };
             });
-
-            console.log(`Fetching manager data for ID ${managerId}...`);
-            // Load manager's team
-            const managerUrl = `/api/manager/${managerId}`;
-            console.log('Manager URL:', managerUrl);
-            const managerResponse = await fetch(managerUrl);
-            if (!managerResponse.ok) {
-                throw new Error(`HTTP error! status: ${managerResponse.status} for ${managerUrl}`);
-            }
-            const managerData = await managerResponse.json();
-            console.log('Manager data received:', managerData);
 
             // Clear existing team
             selectedPlayers.clear();
@@ -691,13 +775,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 nameDisplay.textContent = '';
             });
 
-            // Load manager's team
-            managerData.picks.forEach(pick => {
-                const player = allPlayers.find(p => p.id === pick.element);
-                if (player) {
-                    addPlayerToTeam(player);
+            // Load manager's team from gameweek data
+            if (gameweekData.picks && Array.isArray(gameweekData.picks)) {
+                console.log('Adding players to team from picks:', gameweekData.picks);
+                for (const pick of gameweekData.picks) {
+                    const player = allPlayers.find(p => p.id === pick.element);
+                    if (player) {
+                        // Add captain and vice-captain status
+                        player.is_captain = pick.is_captain;
+                        player.is_vice_captain = pick.is_vice_captain;
+                        player.position_number = pick.position;
+                        const added = addPlayerToTeam(player);
+                        if (!added) {
+                            console.warn(`Failed to add player ${player.web_name} to team`);
+                        }
+                    } else {
+                        console.warn(`Player with ID ${pick.element} not found in allPlayers`);
+                    }
                 }
-            });
+            } else {
+                console.warn('No picks data found in gameweek data:', gameweekData);
+            }
 
             // Refresh displays
             filteredPlayers = [...allPlayers];
@@ -738,4 +836,53 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Automatically fetch players on page load
     fetchPlayers();
+
+    function calculateFormation() {
+        const formation = {
+            GK: 0,
+            DEF: 0,
+            MID: 0,
+            FWD: 0
+        };
+
+        // Get first 11 players based on position_number from FPL API
+        const startingEleven = Array.from(selectedPlayers.values())
+            .filter(player => player.position_number <= 11)
+            .sort((a, b) => a.position_number - b.position_number);
+
+        console.log('Starting eleven:', startingEleven.map(p => ({
+            name: p.web_name,
+            position: positionMap[p.element_type],
+            position_number: p.position_number
+        })));
+
+        // Count starting 11 by position
+        startingEleven.forEach(player => {
+            const pos = positionMap[player.element_type];
+            formation[pos]++;
+        });
+
+        console.log('Starting eleven formation count:', formation);
+
+        // Return formation string (e.g., "4-3-3")
+        return `${formation.DEF}-${formation.MID}-${formation.FWD}`;
+    }
+
+    function updateTeamStats() {
+        const teamStatsDiv = document.querySelector('.team-stats');
+        const totalValue = Array.from(selectedPlayers.values())
+            .reduce((sum, player) => sum + (player.now_cost || player.value) / 10, 0);
+        const remainingBudget = BUDGET_LIMIT - totalValue;
+        
+        const formation = calculateFormation();
+        const formationClass = formation === 'Invalid Formation' ? 'budget-warning' : 'budget-ok';
+        
+        teamStatsDiv.innerHTML = `
+            <p>Players: ${selectedPlayers.size}/15</p>
+            <p class="${formationClass}">Formation: ${formation}</p>
+            <p class="${remainingBudget >= 0 ? 'budget-ok' : 'budget-warning'}">
+                Budget: £${remainingBudget.toFixed(1)}m
+            </p>
+        `;
+    }
 });

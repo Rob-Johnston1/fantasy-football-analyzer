@@ -1,213 +1,135 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import json
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 import requests
 import time
 
-# Cache mechanism
-cache = {
-    'last_update': 0,
-    'data': None
-}
-
-def fetch_fpl_data():
-    current_time = time.time()
-    # Cache for 5 minutes
-    if cache['data'] is None or current_time - cache['last_update'] > 300:
-        try:
-            response = requests.get('https://fantasy.premierleague.com/api/bootstrap-static/')
-            if response.status_code == 200:
-                data = response.json()
-                cache['data'] = data
-                cache['last_update'] = current_time
-                return data
-            else:
-                print(f"Error fetching FPL data: {response.status_code}")
-                return None
-        except Exception as e:
-            print(f"Exception fetching FPL data: {e}")
-            return None
-    return cache['data']
-
 class RequestHandler(SimpleHTTPRequestHandler):
-    def do_OPTIONS(self):
-        self.send_response(200)
+    def send_cors_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Accept, Content-Type')
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_cors_headers()
         self.end_headers()
-    
-    def end_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        SimpleHTTPRequestHandler.end_headers(self)
-    
+
+    def send_json_response(self, data, status=200):
+        self.send_response(status)
+        self.send_header('Content-type', 'application/json')
+        self.send_cors_headers()
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+
+    def handle_players_request(self):
+        try:
+            url = "https://fantasy.premierleague.com/api/bootstrap-static/"
+            response = requests.get(url)
+            data = response.json()
+            self.send_json_response(data)
+        except Exception as e:
+            self.send_json_response({'error': str(e)}, 500)
+
+    def handle_fixtures_request(self):
+        try:
+            # Get bootstrap data for teams and current gameweek
+            bootstrap_url = "https://fantasy.premierleague.com/api/bootstrap-static/"
+            bootstrap_response = requests.get(bootstrap_url)
+            bootstrap_data = bootstrap_response.json()
+            
+            # Get current gameweek
+            current_gameweek = next((event['id'] for event in bootstrap_data['events'] 
+                                   if event['is_current']), None)
+            
+            if not current_gameweek:
+                self.send_json_response({'error': 'Could not determine current gameweek'}, 400)
+                return
+
+            # Get fixtures
+            fixtures_url = "https://fantasy.premierleague.com/api/fixtures/"
+            fixtures_response = requests.get(fixtures_url)
+            fixtures_data = fixtures_response.json()
+
+            # Filter and sort upcoming fixtures
+            upcoming_fixtures = [f for f in fixtures_data if not f['finished'] and f['event'] is not None]
+            upcoming_fixtures.sort(key=lambda x: x['event'])
+            
+            # Create team fixtures mapping
+            team_next_fixtures = {}
+            teams = {team['id']: team['name'] for team in bootstrap_data['teams']}
+            
+            for fixture in upcoming_fixtures:
+                # Add home team's next fixture
+                if fixture['team_h'] not in team_next_fixtures:
+                    team_next_fixtures[fixture['team_h']] = {
+                        'opponent': fixture['team_a'],
+                        'is_home': True,
+                        'event': fixture['event'],
+                        'kickoff_time': fixture['kickoff_time'],
+                        'team_name': teams.get(fixture['team_h'], 'Unknown'),
+                        'opponent_name': teams.get(fixture['team_a'], 'Unknown'),
+                        'formatted_fixture': f"vs {teams.get(fixture['team_a'], 'Unknown')} (H)"
+                    }
+                
+                # Add away team's next fixture
+                if fixture['team_a'] not in team_next_fixtures:
+                    team_next_fixtures[fixture['team_a']] = {
+                        'opponent': fixture['team_h'],
+                        'is_home': False,
+                        'event': fixture['event'],
+                        'kickoff_time': fixture['kickoff_time'],
+                        'team_name': teams.get(fixture['team_a'], 'Unknown'),
+                        'opponent_name': teams.get(fixture['team_h'], 'Unknown'),
+                        'formatted_fixture': f"vs {teams.get(fixture['team_h'], 'Unknown')} (A)"
+                    }
+
+            self.send_json_response({
+                'current_gameweek': current_gameweek,
+                'team_next_fixtures': team_next_fixtures
+            })
+        except Exception as e:
+            print(f"Error in fixtures request: {str(e)}")
+            self.send_json_response({'error': str(e)}, 500)
+
+    def handle_gameweek_request(self, gameweek, manager_id):
+        try:
+            url = f"https://fantasy.premierleague.com/api/entry/{manager_id}/event/{gameweek}/picks/"
+            response = requests.get(url)
+            data = response.json()
+            self.send_json_response(data)
+        except Exception as e:
+            self.send_json_response({'error': str(e)}, 500)
+
     def do_GET(self):
         parsed_path = urlparse(self.path)
-        path_parts = parsed_path.path.split('/')
         
+        # API endpoints
         if parsed_path.path == '/api/players':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            
-            try:
-                data = fetch_fpl_data()
-                if data:
-                    # Return both players and teams data
-                    response_data = {
-                        'elements': data['elements'],
-                        'teams': data['teams']
-                    }
-                    self.wfile.write(json.dumps(response_data).encode())
-                else:
-                    self.wfile.write(json.dumps({
-                        'error': 'Failed to fetch player data'
-                    }).encode())
-            except Exception as e:
-                self.wfile.write(json.dumps({
-                    'error': f'Error fetching player data: {str(e)}'
-                }).encode())
+            self.handle_players_request()
             return
-
+        elif parsed_path.path == '/api/fixtures':
+            self.handle_fixtures_request()
+            return
         elif parsed_path.path.startswith('/api/gameweek/'):
-            # Handle direct gameweek URL format (e.g., /api/gameweek/14)
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
+            gameweek = parsed_path.path.split('/')[-1]
+            query_params = parse_qs(parsed_path.query)
+            manager_id = query_params.get('manager_id', [''])[0]
             
-            try:
-                gameweek = path_parts[-1]
-                # Use a default manager ID or get it from query params if available
-                manager_id = "12345"  # Default manager ID
-                if parsed_path.query:
-                    params = dict(param.split('=') for param in parsed_path.query.split('&'))
-                    manager_id = params.get('manager_id', manager_id)
+            if not manager_id:
+                self.send_json_response({'error': 'Missing manager_id parameter'}, 400)
+                return
                 
-                if not gameweek.isdigit() or not (1 <= int(gameweek) <= 38):
-                    raise ValueError("Invalid gameweek number")
-                
-                # First get the manager's picks for this gameweek
-                picks_response = requests.get(f'https://fantasy.premierleague.com/api/entry/{manager_id}/event/{gameweek}/picks/')
-                if picks_response.status_code == 200:
-                    picks_data = picks_response.json()
-                    
-                    # Then get the live gameweek data for all players
-                    live_response = requests.get(f'https://fantasy.premierleague.com/api/event/{gameweek}/live/')
-                    if live_response.status_code == 200:
-                        live_data = live_response.json()
-                        
-                        # Add live points to each picked player
-                        for pick in picks_data['picks']:
-                            player_live = next((p for p in live_data['elements'] if p['id'] == pick['element']), None)
-                            if player_live:
-                                pick['points'] = player_live['stats']['total_points']
-                    
-                    self.wfile.write(json.dumps(picks_data).encode())
-                else:
-                    self.wfile.write(json.dumps({
-                        'error': f'Failed to fetch gameweek data: {picks_response.status_code}'
-                    }).encode())
-            except Exception as e:
-                self.wfile.write(json.dumps({
-                    'error': f'Error fetching gameweek data: {str(e)}'
-                }).encode())
+            self.handle_gameweek_request(gameweek, manager_id)
             return
-
-        elif parsed_path.path == '/api/gameweek':
-            # Handle query parameter format (e.g., /api/gameweek?manager_id=123&gameweek=14)
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            
-            try:
-                params = dict(param.split('=') for param in parsed_path.query.split('&'))
-                manager_id = params.get('manager_id')
-                gameweek = params.get('gameweek')
-                
-                if not manager_id or not gameweek:
-                    raise ValueError("Missing manager_id or gameweek parameter")
-                
-                response = requests.get(f'https://fantasy.premierleague.com/api/entry/{manager_id}/event/{gameweek}/picks/')
-                if response.status_code == 200:
-                    picks_data = response.json()
-                    self.wfile.write(json.dumps(picks_data).encode())
-                else:
-                    self.wfile.write(json.dumps({
-                        'error': f'Failed to fetch gameweek data: {response.status_code}'
-                    }).encode())
-            except Exception as e:
-                self.wfile.write(json.dumps({
-                    'error': f'Error fetching gameweek data: {str(e)}'
-                }).encode())
-            return
-
-        elif parsed_path.path.startswith('/api/manager/'):
-            # Handle direct manager ID format (e.g., /api/manager/12345)
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            
-            try:
-                manager_id = path_parts[-1]
-                if not manager_id.isdigit():
-                    raise ValueError("Invalid manager ID")
-                
-                response = requests.get(f'https://fantasy.premierleague.com/api/entry/{manager_id}/')
-                if response.status_code == 200:
-                    manager_data = response.json()
-                    
-                    # Also fetch the manager's current team
-                    picks_response = requests.get(f'https://fantasy.premierleague.com/api/entry/{manager_id}/event/{manager_data["current_event"]}/picks/')
-                    if picks_response.status_code == 200:
-                        picks_data = picks_response.json()
-                        manager_data['picks'] = picks_data['picks']
-                    
-                    self.wfile.write(json.dumps(manager_data).encode())
-                else:
-                    self.wfile.write(json.dumps({
-                        'error': f'Failed to fetch manager data: {response.status_code}'
-                    }).encode())
-            except Exception as e:
-                self.wfile.write(json.dumps({
-                    'error': f'Error fetching manager data: {str(e)}'
-                }).encode())
-            return
-
-        elif parsed_path.path == '/api/manager':
-            # Handle query parameter format (e.g., /api/manager?id=12345)
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            
-            try:
-                manager_id = parsed_path.query.split('=')[1]
-                response = requests.get(f'https://fantasy.premierleague.com/api/entry/{manager_id}/')
-                if response.status_code == 200:
-                    manager_data = response.json()
-                    
-                    # Also fetch the manager's current team
-                    picks_response = requests.get(f'https://fantasy.premierleague.com/api/entry/{manager_id}/event/{manager_data["current_event"]}/picks/')
-                    if picks_response.status_code == 200:
-                        picks_data = picks_response.json()
-                        manager_data['picks'] = picks_data['picks']
-                    
-                    self.wfile.write(json.dumps(manager_data).encode())
-                else:
-                    self.wfile.write(json.dumps({
-                        'error': f'Failed to fetch manager data: {response.status_code}'
-                    }).encode())
-            except Exception as e:
-                self.wfile.write(json.dumps({
-                    'error': f'Error fetching manager data: {str(e)}'
-                }).encode())
-            return
-
+        
+        # For all other paths, serve static files
         return SimpleHTTPRequestHandler.do_GET(self)
 
 def run(server_class=HTTPServer, handler_class=RequestHandler, port=8000):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    print("Starting server on port %d..." % port)
+    print(f"Starting server on port {port}...")
     httpd.serve_forever()
 
 if __name__ == '__main__':

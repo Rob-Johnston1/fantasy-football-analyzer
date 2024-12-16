@@ -294,6 +294,58 @@ body {
     color: #000;
 }
 
+#currentTeamTable .expand-button {
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    transition: transform 0.2s ease;
+}
+
+#currentTeamTable .expand-button.expanded {
+    transform: rotate(90deg);
+}
+
+#currentTeamTable .details-row {
+    display: none;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+#currentTeamTable .details-row.visible {
+    display: table-row;
+}
+
+#currentTeamTable .details-content {
+    padding: 15px;
+}
+
+#currentTeamTable .details-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+#currentTeamTable .detail-item {
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+#currentTeamTable .detail-label {
+    font-size: 12px;
+    color: #aaa;
+    margin-bottom: 4px;
+}
+
+#currentTeamTable .detail-value {
+    font-size: 14px;
+    color: #fff;
+}
+
 /* Table responsive */
 .table-responsive {
     margin-top: 20px;
