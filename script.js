@@ -174,7 +174,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const tableBody = document.querySelector('#playersTable tbody');
         
         tableBody.innerHTML = '';
-        playersToDisplay.forEach(player => {
+        playersToDisplay.forEach((player, index) => {
             const row = document.createElement('tr');
             const captainStatus = player.is_captain ? '(C) ' : player.is_vice_captain ? '(VC) ' : '';
             row.innerHTML = `
@@ -306,7 +306,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         position.classList.add('occupied');
-        position.querySelector('.player-circle').textContent = playerData.web_name.charAt(0);
+        const circle = position.querySelector('.player-circle');
+        circle.textContent = playerData.web_name.charAt(0);
+        
+        // Add captain/vice-captain indicator if applicable
+        if (playerData.is_captain) {
+            const captainIndicator = document.createElement('div');
+            captainIndicator.className = 'captain-indicator';
+            captainIndicator.textContent = 'C';
+            circle.appendChild(captainIndicator);
+        } else if (playerData.is_vice_captain) {
+            const viceCaptainIndicator = document.createElement('div');
+            viceCaptainIndicator.className = 'vice-captain-indicator';
+            viceCaptainIndicator.textContent = 'V';
+            circle.appendChild(viceCaptainIndicator);
+        }
+        
         position.querySelector('.player-name').textContent = playerData.web_name;
 
         selectedPlayers.set(position.id, playerData);
@@ -317,32 +332,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function removePlayerFromTeam(playerData) {
-        // Find and remove the player
-        let removed = false;
-        selectedPlayers.forEach((player, positionId) => {
+        let positionId = null;
+        for (let [id, player] of selectedPlayers.entries()) {
             if (player.id === playerData.id) {
-                // Clear the position
-                const position = document.getElementById(positionId);
-                const circle = position.querySelector('.player-circle');
-                const nameDisplay = position.querySelector('.player-name');
-                
-                circle.textContent = '+';
-                position.classList.remove('occupied');
-                nameDisplay.textContent = '';
-                
-                // Remove from selected players
-                selectedPlayers.delete(positionId);
-                removed = true;
+                positionId = id;
+                break;
             }
-        });
-        
-        if (removed) {
-            updateActionButtons();
-            updateTeamStats();
-            updateCurrentTeamTable();
         }
-        
-        return removed;
+
+        if (positionId) {
+            const position = document.getElementById(positionId);
+            position.classList.remove('occupied');
+            const circle = position.querySelector('.player-circle');
+            circle.textContent = positionId.replace('position', '');
+            
+            // Remove captain/vice-captain indicator if present
+            const captainIndicator = circle.querySelector('.captain-indicator');
+            const viceCaptainIndicator = circle.querySelector('.vice-captain-indicator');
+            if (captainIndicator) captainIndicator.remove();
+            if (viceCaptainIndicator) viceCaptainIndicator.remove();
+            
+            position.querySelector('.player-name').textContent = '';
+
+            selectedPlayers.delete(positionId);
+            updateTeamStats();
+            updateActionButtons();
+            updateCurrentTeamTable();
+            return true;
+        }
+        return false;
     }
 
     function updateActionButtons() {
@@ -395,9 +413,18 @@ document.addEventListener('DOMContentLoaded', function() {
         sortedPlayers.forEach(player => {
             const row = document.createElement('tr');
             const position = positionMap[player.element_type] || 'Unknown';
+            
+            // Create captain badge if applicable
+            let captainBadge = '';
+            if (player.is_captain) {
+                captainBadge = '<span class="captain-badge captain">C</span>';
+            } else if (player.is_vice_captain) {
+                captainBadge = '<span class="captain-badge vice-captain">V</span>';
+            }
+            
             row.innerHTML = `
                 <td>${position}</td>
-                <td>${player.web_name || player.name}</td>
+                <td class="captain-cell">${player.web_name || player.name}${captainBadge}</td>
                 <td>${player.team_name || teamMap[player.team] || 'Unknown'}</td>
                 <td>£${((player.now_cost || player.value) / 10).toFixed(1)}m</td>
                 <td>${player.total_points || player.points || 0}</td>
@@ -405,8 +432,6 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
             currentTeamTableBody.appendChild(row);
         });
-
-        console.log('Updated current team table with players:', sortedPlayers);
     }
 
     function handleActionClick(e, playerData) {
