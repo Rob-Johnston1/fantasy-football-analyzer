@@ -53,14 +53,12 @@ class RequestHandler(SimpleHTTPRequestHandler):
             try:
                 data = fetch_fpl_data()
                 if data:
-                    players = data['elements']
-                    teams = {team['id']: team['name'] for team in data['teams']}
-                    
-                    # Add team names to player data
-                    for player in players:
-                        player['team_name'] = teams.get(player['team'], 'Unknown')
-                    
-                    self.wfile.write(json.dumps(players).encode())
+                    # Return both players and teams data
+                    response_data = {
+                        'elements': data['elements'],
+                        'teams': data['teams']
+                    }
+                    self.wfile.write(json.dumps(response_data).encode())
                 else:
                     self.wfile.write(json.dumps({
                         'error': 'Failed to fetch player data'

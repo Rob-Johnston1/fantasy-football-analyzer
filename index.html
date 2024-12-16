@@ -53,67 +53,76 @@
         </div>
 
         <div class="row">
-            <div class="col-12">
+            <div class="col-6">
                 <div class="pitch-container">
-                    <div class="football-pitch">
-                        <!-- Goalkeeper -->
-                        <div id="position1" class="player-position" data-position="GK" style="bottom: 10%; left: 50%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                    <div class="pitch-markings">
+                        <div class="center-circle"></div>
+                        <div class="penalty-area top"></div>
+                        <div class="penalty-area bottom"></div>
+                        <div class="center-line"></div>
+                    </div>
+                    
+                    <!-- Forwards -->
+                    <div class="player-row forwards">
+                        <div class="player-position" id="position10" data-position="FWD">
+                            <div class="player-circle">10</div>
+                            <div class="player-name">Forward 1</div>
                         </div>
-
-                        <!-- Defenders -->
-                        <div id="position2" class="player-position" data-position="DEF" style="bottom: 35%; left: 20%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                        <div class="player-position" id="position11" data-position="FWD">
+                            <div class="player-circle">11</div>
+                            <div class="player-name">Forward 2</div>
                         </div>
-                        <div id="position3" class="player-position" data-position="DEF" style="bottom: 35%; left: 40%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                    </div>
+                    
+                    <!-- Midfielders -->
+                    <div class="player-row midfielders">
+                        <div class="player-position" id="position6" data-position="MID">
+                            <div class="player-circle">6</div>
+                            <div class="player-name">Mid 1</div>
                         </div>
-                        <div id="position4" class="player-position" data-position="DEF" style="bottom: 35%; left: 60%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                        <div class="player-position" id="position7" data-position="MID">
+                            <div class="player-circle">7</div>
+                            <div class="player-name">Mid 2</div>
                         </div>
-                        <div id="position5" class="player-position" data-position="DEF" style="bottom: 35%; left: 80%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                        <div class="player-position" id="position8" data-position="MID">
+                            <div class="player-circle">8</div>
+                            <div class="player-name">Mid 3</div>
                         </div>
-
-                        <!-- Midfielders -->
-                        <div id="position6" class="player-position" data-position="MID" style="bottom: 55%; left: 20%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                        <div class="player-position" id="position9" data-position="MID">
+                            <div class="player-circle">9</div>
+                            <div class="player-name">Mid 4</div>
                         </div>
-                        <div id="position7" class="player-position" data-position="MID" style="bottom: 55%; left: 40%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                    </div>
+                    
+                    <!-- Defenders -->
+                    <div class="player-row defenders">
+                        <div class="player-position" id="position2" data-position="DEF">
+                            <div class="player-circle">2</div>
+                            <div class="player-name">Def 1</div>
                         </div>
-                        <div id="position8" class="player-position" data-position="MID" style="bottom: 55%; left: 60%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                        <div class="player-position" id="position3" data-position="DEF">
+                            <div class="player-circle">3</div>
+                            <div class="player-name">Def 2</div>
                         </div>
-                        <div id="position9" class="player-position" data-position="MID" style="bottom: 55%; left: 80%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                        <div class="player-position" id="position4" data-position="DEF">
+                            <div class="player-circle">4</div>
+                            <div class="player-name">Def 3</div>
                         </div>
-
-                        <!-- Forwards -->
-                        <div id="position10" class="player-position" data-position="FWD" style="bottom: 75%; left: 35%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                        <div class="player-position" id="position5" data-position="DEF">
+                            <div class="player-circle">5</div>
+                            <div class="player-name">Def 4</div>
                         </div>
-                        <div id="position11" class="player-position" data-position="FWD" style="bottom: 75%; left: 65%; transform: translateX(-50%);">
-                            <div class="player-circle">+</div>
-                            <div class="player-name"></div>
+                    </div>
+                    
+                    <!-- Goalkeeper -->
+                    <div class="player-row goalkeeper">
+                        <div class="player-position" id="position1" data-position="GK">
+                            <div class="player-circle">1</div>
+                            <div class="player-name">GK</div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <div class="row">
-            <div class="col-12">
                 <div class="substitutes-outer">
                     <div class="substitutes-label">Substitutes</div>
                     <div class="substitutes-container">
@@ -138,9 +147,28 @@
                     </div>
                 </div>
             </div>
+
+            <div class="col-6">
+                <div class="current-team-container">
+                    <h3>Current Team</h3>
+                    <table id="currentTeamTable" class="table table-dark">
+                        <thead>
+                            <tr>
+                                <th>Position</th>
+                                <th>Name</th>
+                                <th>Team</th>
+                                <th>Price</th>
+                                <th>Points</th>
+                                <th>Form</th>
+                            </tr>
+                        </thead>
+                        <tbody id="currentTeamTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
-        <div class="row">
+        <div class="row mt-4">
             <div class="col-12">
                 <div class="table-responsive">
                     <div class="search-container">

@@ -34,29 +34,8 @@ document.addEventListener('DOMContentLoaded', function() {
         4: 'FWD'
     };
 
-    // Team mapping
-    const teamMap = {
-        1: 'Arsenal',
-        2: 'Aston Villa',
-        3: 'Bournemouth',
-        4: 'Brentford',
-        5: 'Brighton',
-        6: 'Burnley',
-        7: 'Chelsea',
-        8: 'Crystal Palace',
-        9: 'Everton',
-        10: 'Fulham',
-        11: 'Liverpool',
-        12: 'Luton',
-        13: 'Man City',
-        14: 'Man Utd',
-        15: 'Newcastle',
-        16: 'Nott\'m Forest',
-        17: 'Sheffield Utd',
-        18: 'Spurs',
-        19: 'West Ham',
-        20: 'Wolves'
-    };
+    // Team mapping - We'll update this dynamically from the API
+    let teamMap = {};
 
     function createActionButton(playerId) {
         return `
@@ -320,37 +299,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function addPlayerToTeam(playerData) {
-        // First validate the selection
-        if (!validateTeamSelection(playerData)) {
+        const position = findNextAvailablePosition(positionMap[playerData.element_type]);
+        if (!position) {
+            alert(`No available ${positionMap[playerData.element_type]} positions in the team!`);
             return false;
         }
 
-        const positionType = positionMap[playerData.element_type];
-        const nextPosition = findNextAvailablePosition(positionType);
-        
-        if (!nextPosition) {
-            alert(`No available ${positionType} positions in the team!`);
-            return false;
-        }
+        position.classList.add('occupied');
+        position.querySelector('.player-circle').textContent = playerData.web_name.charAt(0);
+        position.querySelector('.player-name').textContent = playerData.web_name;
 
-        // Get position number from the circle's ID
-        const positionNumber = nextPosition.id;
-        
-        // Update the circle
-        const circle = nextPosition.querySelector('.player-circle');
-        const nameDisplay = nextPosition.querySelector('.player-name');
-        
-        circle.textContent = playerData.first_name[0] + playerData.second_name[0];
-        nextPosition.classList.add('occupied');
-        nameDisplay.textContent = `${playerData.first_name} ${playerData.second_name}`;
-        
-        // Store the player data
-        selectedPlayers.set(positionNumber, playerData);
-        
-        // Update action buttons and stats
-        updateActionButtons();
+        selectedPlayers.set(position.id, playerData);
         updateTeamStats();
-        
+        updateActionButtons();
+        updateCurrentTeamTable();
         return true;
     }
 
@@ -377,6 +339,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (removed) {
             updateActionButtons();
             updateTeamStats();
+            updateCurrentTeamTable();
         }
         
         return removed;
@@ -417,6 +380,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 element.style.backgroundColor = count > POSITION_LIMITS[position] ? 'rgba(220, 53, 69, 0.2)' : 'rgba(76, 175, 80, 0.2)';
             }
         });
+    }
+
+    function updateCurrentTeamTable() {
+        const currentTeamTableBody = document.getElementById('currentTeamTableBody');
+        currentTeamTableBody.innerHTML = '';
+
+        // Sort players by position (GK -> DEF -> MID -> FWD)
+        const positionOrder = { 1: 1, 2: 2, 3: 3, 4: 4 }; // Using element_type numbers
+        const sortedPlayers = Array.from(selectedPlayers.values()).sort((a, b) => {
+            return positionOrder[a.element_type] - positionOrder[b.element_type];
+        });
+
+        sortedPlayers.forEach(player => {
+            const row = document.createElement('tr');
+            const position = positionMap[player.element_type] || 'Unknown';
+            row.innerHTML = `
+                <td>${position}</td>
+                <td>${player.web_name || player.name}</td>
+                <td>${player.team_name || teamMap[player.team] || 'Unknown'}</td>
+                <td>£${((player.now_cost || player.value) / 10).toFixed(1)}m</td>
+                <td>${player.total_points || player.points || 0}</td>
+                <td>${player.form || '0.0'}</td>
+            `;
+            currentTeamTableBody.appendChild(row);
+        });
+
+        console.log('Updated current team table with players:', sortedPlayers);
     }
 
     function handleActionClick(e, playerData) {
@@ -487,6 +477,7 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedPlayers.set(dropTarget.id, playerData);
         updateActionButtons();
         updateTeamStats();
+        updateCurrentTeamTable();
 
         document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
     }
@@ -561,10 +552,20 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const data = await response.json();
             
-            // Store all players
-            allPlayers = data.map(player => ({
+            // Update team mapping from API data
+            if (data.teams) {
+                teamMap = {};
+                data.teams.forEach(team => {
+                    teamMap[team.id] = team.name;
+                });
+            }
+            
+            allPlayers = data.elements;
+            
+            // Add team names to player data
+            allPlayers = allPlayers.map(player => ({
                 ...player,
-                team_name: teamMap[player.team] || `Team ${player.team}`
+                team_name: teamMap[player.team] || 'Unknown'
             }));
             
             if (!Array.isArray(allPlayers) || allPlayers.length === 0) {
@@ -677,6 +678,7 @@ document.addEventListener('DOMContentLoaded', function() {
             filteredPlayers = [...allPlayers];
             displayPlayers(filteredPlayers, currentPage);
             updateTeamStats();
+            updateCurrentTeamTable();
 
             console.log('All data loaded successfully');
         } catch (error) {
