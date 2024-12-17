@@ -306,35 +306,68 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function addPlayerToTeam(playerData) {
-        const position = findNextAvailablePosition(positionMap[playerData.element_type]);
-        if (!position) {
-            alert(`No available ${positionMap[playerData.element_type]} positions in the team!`);
+        console.log('Adding player to team:', {
+            pick_number: playerData.position_number,
+            player_name: playerData.web_name,
+            is_sub: playerData.position_number > 11,
+            element_type: playerData.element_type,
+            position: positionMap[playerData.element_type]
+        });
+
+        // Get the position element
+        const positionElement = document.getElementById(`position${playerData.position_number}`);
+        if (!positionElement) {
+            console.error(`No position element found for position ${playerData.position_number}`);
             return false;
         }
 
-        position.classList.add('occupied');
-        const circle = position.querySelector('.player-circle');
-        circle.textContent = playerData.web_name.charAt(0);
-        
-        // Add captain/vice-captain indicator if applicable
-        if (playerData.is_captain) {
-            const captainIndicator = document.createElement('div');
-            captainIndicator.className = 'captain-indicator';
-            captainIndicator.textContent = 'C';
-            circle.appendChild(captainIndicator);
-        } else if (playerData.is_vice_captain) {
-            const viceCaptainIndicator = document.createElement('div');
-            viceCaptainIndicator.className = 'vice-captain-indicator';
-            viceCaptainIndicator.textContent = 'V';
-            circle.appendChild(viceCaptainIndicator);
-        }
-        
-        position.querySelector('.player-name').textContent = playerData.web_name;
+        // Calculate 3-game average
+        // Using past_3_games from player history or form if not available
+        const avgPoints = playerData.form ? parseFloat(playerData.form).toFixed(1) : '-';
 
-        selectedPlayers.set(position.id, playerData);
+        // Clear any existing content
+        const circle = positionElement.querySelector('.player-circle');
+        if (circle) {
+            circle.textContent = playerData.web_name[0];
+            
+            // Remove any existing indicators
+            const existingIndicator = circle.querySelector('.captain-indicator, .vice-captain-indicator');
+            if (existingIndicator) {
+                existingIndicator.remove();
+            }
+
+            // Add captain/vice-captain indicator if applicable
+            if (playerData.is_captain) {
+                const captainIndicator = document.createElement('div');
+                captainIndicator.className = 'captain-indicator';
+                captainIndicator.textContent = 'C';
+                circle.appendChild(captainIndicator);
+            } else if (playerData.is_vice_captain) {
+                const viceCaptainIndicator = document.createElement('div');
+                viceCaptainIndicator.className = 'vice-captain-indicator';
+                viceCaptainIndicator.textContent = 'V';
+                circle.appendChild(viceCaptainIndicator);
+            }
+        }
+
+        // Update player name and points
+        const nameElement = positionElement.querySelector('.player-name');
+        if (nameElement) {
+            nameElement.innerHTML = `
+                <div class="name">${playerData.web_name}</div>
+                <div class="points">${playerData.event_points} pts</div>
+                <div class="avg-points">avg ${avgPoints}</div>
+            `;
+        }
+
+        // Show the position
+        positionElement.style.display = 'flex';
+        positionElement.classList.add('occupied');
+
+        // Store player data
+        selectedPlayers.set(playerData.id, playerData);
+        
         updateTeamStats();
-        updateActionButtons();
-        updateCurrentTeamTable();
         return true;
     }
 
@@ -384,27 +417,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateTeamStats() {
-        const stats = calculateTeamStats();
+        const teamStatsDiv = document.querySelector('.team-stats');
+        if (!teamStatsDiv) return;
+
+        const totalValue = Array.from(selectedPlayers.values())
+            .reduce((sum, player) => sum + (player.now_cost || player.value) / 10, 0);
         
-        // Update team value
-        document.getElementById('teamValue').textContent = `£${stats.totalValue.toFixed(1)}m`;
+        const formation = calculateFormation();
         
-        // Update position counts
-        document.getElementById('gkCount').textContent = `${stats.positionCounts.GK}/2 GK`;
-        document.getElementById('defCount').textContent = `${stats.positionCounts.DEF}/5 DEF`;
-        document.getElementById('midCount').textContent = `${stats.positionCounts.MID}/5 MID`;
-        document.getElementById('fwdCount').textContent = `${stats.positionCounts.FWD}/3 FWD`;
-        
-        // Update stat colors based on limits
-        const valueElement = document.getElementById('teamValue');
-        valueElement.style.backgroundColor = stats.totalValue > BUDGET_LIMIT ? 'rgba(220, 53, 69, 0.2)' : 'rgba(76, 175, 80, 0.2)';
-        
-        Object.entries(stats.positionCounts).forEach(([position, count]) => {
-            const element = document.getElementById(`${position.toLowerCase()}Count`);
-            if (element) {
-                element.style.backgroundColor = count > POSITION_LIMITS[position] ? 'rgba(220, 53, 69, 0.2)' : 'rgba(76, 175, 80, 0.2)';
-            }
-        });
+        teamStatsDiv.innerHTML = `
+            <p>Team Value: £${totalValue.toFixed(1)}m</p>
+            <p>Formation: ${formation}</p>
+        `;
     }
 
     function updateCurrentTeamTable() {
@@ -567,7 +591,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add player name below the circle
         const playerNameElement = dropTarget.querySelector('.player-name');
         if (playerNameElement) {
-            playerNameElement.textContent = playerData.second_name;
+            playerNameElement.textContent = playerData.web_name;
             playerNameElement.classList.add('visible');
         }
 
@@ -837,6 +861,114 @@ document.addEventListener('DOMContentLoaded', function() {
     // Automatically fetch players on page load
     fetchPlayers();
 
+    async function processTeamData(picks, playerData) {
+        const startingEleven = [];
+        const substitutes = [];
+        
+        // Sort picks by position number to ensure proper order
+        picks.sort((a, b) => a.position - b.position);
+        
+        // Process each pick to create player objects
+        picks.forEach(pick => {
+            const playerInfo = playerData[pick.element];
+            const player = {
+                name: playerInfo.web_name,
+                position: positionMap[playerInfo.element_type],
+                position_number: pick.position  // Use the position from FPL API
+            };
+            
+            // First 11 players go to starting eleven, rest to substitutes
+            if (pick.position <= 11) {
+                startingEleven.push(player);
+            } else {
+                substitutes.push(player);
+            }
+        });
+        
+        console.log('Processed starting eleven:', startingEleven);
+        console.log('Processed substitutes:', substitutes);
+        
+        return { startingEleven, substitutes };
+    }
+
+    async function fetchAndDisplayTeam(teamId, gameweek) {
+        try {
+            const picks = await fetchTeamPicks(teamId, gameweek);
+            const playerData = await fetchPlayerDetails(picks);
+            
+            // Process the data into starting eleven and substitutes
+            const { startingEleven, substitutes } = await processTeamData(picks, playerData);
+            
+            // Display the team with the new formation
+            displayTeam(startingEleven, substitutes);
+            
+        } catch (error) {
+            console.error('Error fetching team:', error);
+        }
+    }
+
+    function displayTeam(teamData) {
+        const tableBody = document.getElementById('currentTeamTableBody');
+        tableBody.innerHTML = '';
+
+        if (!teamData || !teamData.picks) {
+            console.error('No team data available');
+            return;
+        }
+
+        // Sort players by position number
+        const picks = teamData.picks.sort((a, b) => a.position - b.position);
+
+        // Track if we've added the substitute divider
+        let substitutesDividerAdded = false;
+
+        picks.forEach(pick => {
+            const player = allPlayers.find(p => p.id === pick.element);
+            if (!player) {
+                console.error(`Player not found for element ${pick.element}`);
+                return;
+            }
+
+            // Add substitute divider before the first substitute
+            if (!substitutesDividerAdded && pick.position > 11) {
+                const dividerRow = document.createElement('tr');
+                dividerRow.className = 'substitute-divider';
+                dividerRow.innerHTML = `
+                    <td colspan="7" class="substitute-label">
+                        <span>Substitutes</span>
+                    </td>
+                `;
+                tableBody.appendChild(dividerRow);
+                substitutesDividerAdded = true;
+            }
+
+            const row = document.createElement('tr');
+            row.className = pick.position > 11 ? 'substitute-player' : 'starting-player';
+            
+            row.innerHTML = `
+                <td>${pick.position}</td>
+                <td>${positionMap[player.element_type]}</td>
+                <td>${player.web_name}${pick.is_captain ? ' (C)' : ''}${pick.is_vice_captain ? ' (V)' : ''}</td>
+                <td>${teamMap[player.team]}</td>
+                <td>£${(player.now_cost / 10).toFixed(1)}m</td>
+                <td>${player.event_points}</td>
+                <td>${player.form}</td>
+            `;
+            
+            tableBody.appendChild(row);
+            
+            // Also update the player on the pitch
+            addPlayerToTeam({
+                ...player,
+                position_number: pick.position,
+                is_captain: pick.is_captain,
+                is_vice_captain: pick.is_vice_captain
+            });
+        });
+
+        updateTeamStats();
+    }
+
     function calculateFormation() {
         const formation = {
             GK: 0,
@@ -845,44 +977,34 @@ document.addEventListener('DOMContentLoaded', function() {
             FWD: 0
         };
 
-        // Get first 11 players based on position_number from FPL API
+        // Get first 11 players based on position_number
         const startingEleven = Array.from(selectedPlayers.values())
-            .filter(player => player.position_number <= 11)
+            .filter(p => p.position_number >= 1 && p.position_number <= 11)
             .sort((a, b) => a.position_number - b.position_number);
 
-        console.log('Starting eleven:', startingEleven.map(p => ({
+        console.log('Formation calculation - Starting eleven:', startingEleven.map(p => ({
+            id: p.id,
             name: p.web_name,
             position: positionMap[p.element_type],
-            position_number: p.position_number
+            position_number: p.position_number,
+            element_type: p.element_type,
+            is_captain: p.is_captain
         })));
 
-        // Count starting 11 by position
+        // Count players by position
         startingEleven.forEach(player => {
             const pos = positionMap[player.element_type];
-            formation[pos]++;
+            if (pos) {
+                formation[pos]++;
+            }
         });
 
-        console.log('Starting eleven formation count:', formation);
+        console.log('Formation counts:', formation);
 
-        // Return formation string (e.g., "4-3-3")
-        return `${formation.DEF}-${formation.MID}-${formation.FWD}`;
-    }
-
-    function updateTeamStats() {
-        const teamStatsDiv = document.querySelector('.team-stats');
-        const totalValue = Array.from(selectedPlayers.values())
-            .reduce((sum, player) => sum + (player.now_cost || player.value) / 10, 0);
-        const remainingBudget = BUDGET_LIMIT - totalValue;
-        
-        const formation = calculateFormation();
-        const formationClass = formation === 'Invalid Formation' ? 'budget-warning' : 'budget-ok';
-        
-        teamStatsDiv.innerHTML = `
-            <p>Players: ${selectedPlayers.size}/15</p>
-            <p class="${formationClass}">Formation: ${formation}</p>
-            <p class="${remainingBudget >= 0 ? 'budget-ok' : 'budget-warning'}">
-                Budget: £${remainingBudget.toFixed(1)}m
-            </p>
-        `;
+        // Return formation string (e.g., "3-4-3")
+        if (formation.DEF >= 3 && formation.MID >= 3 && formation.FWD >= 1) {
+            return `${formation.DEF}-${formation.MID}-${formation.FWD}`;
+        }
+        return 'Invalid Formation';
     }
 });
