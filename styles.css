@@ -644,3 +644,51 @@ body {
     white-space: normal;
     width: 100%;
 }
+
+/* Analysis Section Styles */
+.analysis-content {
+    padding: 15px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.analysis-content h5 {
+    color: #4CAF50;
+    margin-top: 1.5rem;
+    font-weight: 600;
+}
+
+.analysis-content h5:first-child {
+    margin-top: 0;
+}
+
+.analysis-content p {
+    color: #e0e0e0;
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+}
+
+.card {
+    background-color: #2d2d2d;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.card-header {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+}
+
+.card-body {
+    padding: 1rem;
+}
+
+.card-header h5 {
+    color: #ffffff;
+    margin: 0;
+}
+
+/* Collapse animation */
+.collapse {
+    transition: all 0.3s ease-out;
+}

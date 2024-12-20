@@ -1,4 +1,198 @@
+// Global variables
+window.selectedPlayers = [];
+let allPlayers = [];
+let teamNextFixtures = {};
+
+// Utility functions
+function getPositionType(elementType) {
+    switch (elementType) {
+        case 1: return 'GK';
+        case 2: return 'DEF';
+        case 3: return 'MID';
+        case 4: return 'FWD';
+        default: return '';
+    }
+}
+
+function getPositionName(elementType) {
+    switch (elementType) {
+        case 1: return 'Goalkeeper';
+        case 2: return 'Defender';
+        case 3: return 'Midfielder';
+        case 4: return 'Forward';
+        default: return 'Unknown';
+    }
+}
+
+function calculateFormation() {
+    const formation = {
+        GK: 0,
+        DEF: 0,
+        MID: 0,
+        FWD: 0
+    };
+
+    // Only count starting 11
+    const startingEleven = window.selectedPlayers.filter(p => !p.is_sub);
+    startingEleven.forEach(player => {
+        switch (player.element_type) {
+            case 1: formation.GK++; break;
+            case 2: formation.DEF++; break;
+            case 3: formation.MID++; break;
+            case 4: formation.FWD++; break;
+        }
+    });
+
+    return `${formation.DEF}-${formation.MID}-${formation.FWD}`;
+}
+
+function updateTeamStats() {
+    // Update formation and counts
+    const formation = calculateFormation();
+    document.getElementById('formationDisplay').textContent = formation;
+
+    // Count players by position
+    const counts = {
+        GK: window.selectedPlayers.filter(p => p.element_type === 1).length,
+        DEF: window.selectedPlayers.filter(p => p.element_type === 2).length,
+        MID: window.selectedPlayers.filter(p => p.element_type === 3).length,
+        FWD: window.selectedPlayers.filter(p => p.element_type === 4).length
+    };
+
+    // Update position counts
+    document.getElementById('gkCount').textContent = `${counts.GK}/2 GK`;
+    document.getElementById('defCount').textContent = `${counts.DEF}/5 DEF`;
+    document.getElementById('midCount').textContent = `${counts.MID}/5 MID`;
+    document.getElementById('fwdCount').textContent = `${counts.FWD}/3 FWD`;
+
+    // Calculate and update team value
+    const teamValue = window.selectedPlayers.reduce((total, player) => total + player.now_cost, 0) / 10;
+    document.getElementById('teamValue').textContent = `£${teamValue.toFixed(1)}m`;
+
+    // Enable/disable analyze button based on having exactly 11 starting players
+    const startingCount = window.selectedPlayers.filter(p => !p.is_sub).length;
+    const analyzeButton = document.getElementById('analyzeButton');
+    analyzeButton.disabled = startingCount !== 11;
+}
+
+function updatePitchDisplay() {
+    console.log('Updating pitch display with players:', window.selectedPlayers);
+    
+    // Clear all positions first
+    document.querySelectorAll('.player-position').forEach(position => {
+        // Get all elements, checking if they exist
+        const circle = position.querySelector('.player-circle');
+        const name = position.querySelector('.player-name');
+        const points = position.querySelector('.player-points');
+        const form = position.querySelector('.player-form');
+
+        // Reset each element if it exists
+        if (circle) circle.textContent = '+';
+        if (name) name.textContent = '';
+        if (points) points.textContent = '';
+        if (form) form.textContent = '';
+
+        position.classList.remove('occupied');
+        if (circle) circle.classList.remove('captain', 'vice-captain');
+        delete position.dataset.playerId;
+    });
+
+    // Sort players by position and whether they are subs
+    const sortedPlayers = [...window.selectedPlayers].sort((a, b) => {
+        // First sort by whether they are subs
+        if (a.is_sub !== b.is_sub) {
+            return a.is_sub ? 1 : -1;
+        }
+        // Then by position number
+        return a.position_number - b.position_number;
+    });
+
+    console.log('Sorted players:', sortedPlayers);
+
+    // Display players in their positions
+    sortedPlayers.forEach(player => {
+        const positionType = getPositionType(player.element_type);
+        console.log('Finding position for player:', player.web_name, 'type:', positionType, 'is_sub:', player.is_sub, 'position:', player.position_number);
+        
+        // For substitutes, use the substitute positions
+        let availablePosition;
+        if (player.is_sub) {
+            // Positions 12-15 are substitutes
+            availablePosition = document.querySelector(`#position${player.position_number}`);
+        } else {
+            // For starting players, use their exact position number (1-11)
+            availablePosition = document.querySelector(`#position${player.position_number}`);
+            
+            // Fallback to any available position of the correct type if exact position is taken
+            if (!availablePosition || availablePosition.classList.contains('occupied')) {
+                const positions = Array.from(document.querySelectorAll(`.player-position[data-position="${positionType}"]:not(.occupied):not(.substitute)`));
+                availablePosition = positions[0];
+            }
+        }
+        
+        console.log('Found position:', availablePosition);
+        
+        if (availablePosition) {
+            // Get all elements, checking if they exist
+            const circle = availablePosition.querySelector('.player-circle');
+            const nameDisplay = availablePosition.querySelector('.player-name');
+            const pointsDisplay = availablePosition.querySelector('.player-points');
+            const formDisplay = availablePosition.querySelector('.player-form');
+
+            // Update each element if it exists
+            if (circle) {
+                circle.textContent = player.web_name.charAt(0);
+
+                // Remove any existing indicators
+                const existingIndicator = circle.querySelector('.captain-indicator, .vice-captain-indicator');
+                if (existingIndicator) {
+                    existingIndicator.remove();
+                }
+
+                // Add captain/vice-captain indicator if applicable
+                if (player.is_captain) {
+                    const captainIndicator = document.createElement('div');
+                    captainIndicator.className = 'captain-indicator';
+                    captainIndicator.textContent = 'C';
+                    circle.appendChild(captainIndicator);
+                } else if (player.is_vice_captain) {
+                    const viceCaptainIndicator = document.createElement('div');
+                    viceCaptainIndicator.className = 'vice-captain-indicator';
+                    viceCaptainIndicator.textContent = 'V';
+                    circle.appendChild(viceCaptainIndicator);
+                }
+            }
+            if (nameDisplay) nameDisplay.textContent = player.web_name;
+            if (pointsDisplay) pointsDisplay.textContent = `${player.total_points} (${player.gameweek_points || 0})`;
+            if (formDisplay) formDisplay.textContent = player.form || '0.0';
+
+            availablePosition.classList.add('occupied');
+            availablePosition.dataset.playerId = player.id;
+            console.log('Placed player in position:', player.web_name);
+        } else {
+            console.warn('No available position found for player:', player.web_name);
+        }
+    });
+}
+
+// Export for testing
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        getPositionType,
+        getPositionName,
+        calculateFormation,
+        updateTeamStats,
+        updatePitchDisplay,
+        selectedPlayers: window.selectedPlayers
+    };
+}
+
+// DOM Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
+    // Global variables
+    let filteredPlayers = [];
+    let teamMap = {};
+    const currentPage = 1;
     const playersTable = document.getElementById('playersTable');
     const playersTableBody = document.getElementById('playersTableBody');
     const prevPageBtn = document.getElementById('prevPage');
@@ -7,15 +201,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const startRangeSpan = document.getElementById('startRange');
     const endRangeSpan = document.getElementById('endRange');
     const totalPlayersSpan = document.getElementById('totalPlayers');
-    
-    let allPlayers = []; // Store all players
-    let filteredPlayers = []; // Store filtered players
+    const managerIdInput = document.getElementById('managerId');
+    const gameweekInput = document.getElementById('gameweek');
+    const loadDataBtn = document.getElementById('loadData');
+    const loadingSpinner = loadDataBtn.querySelector('.spinner-border');
+    const analyzeTeamBtn = document.getElementById('analyzeTeamBtn');
+    const analysisSection = document.getElementById('analysisSection');
+    const analysisContent = document.getElementById('analysisContent');
+
     let currentSortColumn = ''; // Track current sort column
     let isAscending = true; // Track sort direction
-    let selectedPlayers = new Map(); // Track selected players by position
-    let currentPage = 1;
     const playersPerPage = 10;
-    
+
     // Team constraints
     const BUDGET_LIMIT = 100.0;
     const MAX_PLAYERS_PER_TEAM = 3;
@@ -25,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'MID': 5,
         'FWD': 3
     };
-    
+
     // Position mapping and order
     const positionMap = {
         1: 'GK',
@@ -41,9 +238,6 @@ document.addEventListener('DOMContentLoaded', function() {
         4: 4  // FWD
     };
 
-    // Team mapping - We'll update this dynamically from the API
-    let teamMap = {};
-
     function createActionButton(playerId) {
         return `
             <button class="btn btn-success action-btn" data-player-id="${playerId}">
@@ -56,10 +250,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('#playersTable th').forEach((headerCell, index) => {
         // Skip the Actions column
         if (index === 0) return;
-        
+
         headerCell.addEventListener('click', () => {
             const columnName = headerCell.textContent.toLowerCase().trim();
-            
+
             // Toggle sort direction if clicking the same column
             if (currentSortColumn === columnName) {
                 isAscending = !isAscending;
@@ -67,21 +261,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentSortColumn = columnName;
                 isAscending = true;
             }
-            
+
             // Remove sort classes from all headers
             document.querySelectorAll('#playersTable th').forEach(th => {
                 th.classList.remove('sort-asc', 'sort-desc');
             });
-            
+
             // Add sort class to current header
             headerCell.classList.add(isAscending ? 'sort-asc' : 'sort-desc');
-            
+
             // Sort the entire players array
             sortTable(columnName);
-            
+
             // Reset to first page after sorting
             currentPage = 1;
-            
+
             // Update table with sorted data
             displayPlayers(filteredPlayers, currentPage);
         });
@@ -90,7 +284,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function sortTable(columnName) {
         filteredPlayers.sort((a, b) => {
             let aValue, bValue;
-            
+
             switch(columnName) {
                 case 'id':
                     aValue = parseInt(a.id);
@@ -114,7 +308,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
                 case 'total points':
                     aValue = parseInt(a.total_points);
-                    bValue = parseInt(b.total_points);
+                    bValue = parseInt(a.total_points);
                     break;
                 case 'points/£m':
                     aValue = parseFloat(a.total_points) / parseFloat(a.price);
@@ -160,10 +354,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.warn('Unknown column:', columnName);
                     return 0;
             }
-            
+
             if (aValue === null || aValue === undefined) return 1;
             if (bValue === null || bValue === undefined) return -1;
-            
+
             if (typeof aValue === 'number' && typeof bValue === 'number') {
                 return isAscending ? aValue - bValue : bValue - aValue;
             } else {
@@ -174,81 +368,86 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function displayPlayers(players, page = 1) {
+    function displayPlayers(players, page) {
         const start = (page - 1) * playersPerPage;
         const end = start + playersPerPage;
-        const playersToDisplay = players.slice(start, end);
-        const tableBody = document.querySelector('#playersTable tbody');
+        const pageData = players.slice(start, end);
         
-        tableBody.innerHTML = '';
-        playersToDisplay.forEach((player, index) => {
+        playersTableBody.innerHTML = '';
+        pageData.forEach(player => {
             const row = document.createElement('tr');
-            const captainStatus = player.is_captain ? '(C) ' : player.is_vice_captain ? '(VC) ' : '';
             row.innerHTML = `
-                <td><button class="btn btn-success btn-sm add-player" data-player-id="${player.id}">Add</button></td>
-                <td>${captainStatus}${player.first_name} ${player.second_name}</td>
-                <td>${positionMap[player.element_type]}</td>
-                <td>${player.team_name || teamMap[player.team] || 'Unknown'}</td>
+                <td>${player.web_name}</td>
+                <td>${teamMap[player.team] || 'Unknown'}</td>
+                <td>${getPositionName(player.element_type)}</td>
                 <td>£${(player.now_cost / 10).toFixed(1)}m</td>
-                <td>${player.total_points} (${player.gameweek_points || 0})</td>
+                <td>${player.total_points}</td>
+                <td>${player.form}</td>
+                <td>${teamNextFixtures[player.team]?.formatted_fixture || 'No fixture'}</td>
+                <td>${createActionButton(player.id)}</td>
             `;
-            tableBody.appendChild(row);
+            playersTableBody.appendChild(row);
         });
 
-        // Update pagination
-        updatePagination(players.length);
+        // Update pagination buttons
+        const totalPages = Math.ceil(players.length / playersPerPage);
+        prevPageBtn.disabled = currentPage === 1;
+        nextPageBtn.disabled = currentPage >= totalPages;
+    }
+
+    function updateCurrentTeamTable() {
+        const currentTeamTableBody = document.getElementById('currentTeamTableBody');
+        if (!currentTeamTableBody) return;
+
+        currentTeamTableBody.innerHTML = '';
         
-        // Reattach event listeners
-        document.querySelectorAll('.add-player').forEach(button => {
-            button.addEventListener('click', function() {
-                const playerId = parseInt(this.dataset.playerId);
-                const player = players.find(p => p.id === playerId);
-                if (player) {
-                    addPlayerToTeam(player);
-                }
-            });
+        window.selectedPlayers.forEach(player => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${player.web_name}</td>
+                <td>${teamMap[player.team] || 'Unknown'}</td>
+                <td>${getPositionName(player.element_type)}</td>
+                <td>£${(player.now_cost / 10).toFixed(1)}m</td>
+                <td>${player.total_points}</td>
+                <td>${player.form}</td>
+                <td>${teamNextFixtures[player.team]?.formatted_fixture || 'No fixture'}</td>
+                <td>${player.gameweek_points || 0}</td>
+                <td>${player.is_captain ? '(C)' : player.is_vice_captain ? '(VC)' : ''}</td>
+                <td>${player.is_sub ? 'Sub' : 'Starting'}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm" onclick="removePlayer(${player.id})">
+                        Remove
+                    </button>
+                </td>
+            `;
+            currentTeamTableBody.appendChild(row);
         });
     }
 
-    function updatePagination(totalPlayers) {
-        const totalPages = Math.ceil(totalPlayers / playersPerPage);
-        document.getElementById('currentPage').textContent = `Page ${currentPage} of ${totalPages}`;
-        
-        // Update button states
-        document.getElementById('prevPage').disabled = currentPage === 1;
-        document.getElementById('nextPage').disabled = currentPage >= totalPages;
-    }
+    function updateTeamStats() {
+        // Update team value
+        const teamValue = window.selectedPlayers.reduce((sum, player) => sum + player.now_cost / 10, 0);
+        document.getElementById('teamValue').textContent = `£${teamValue.toFixed(1)}m`;
 
-    function findNextAvailablePosition(positionType) {
-        // For substitutes (position "ANY"), accept any position type
-        const positions = document.querySelectorAll(
-            positionType === "ANY" 
-                ? '.player-position[data-position="ANY"]:not(.occupied)'
-                : `.player-position[data-position="${positionType}"]:not(.substitute):not(.occupied)`
-        );
-        
-        for (let position of positions) {
-            if (!selectedPlayers.has(position.id)) {
-                return position;
-            }
-        }
+        // Update position counts
+        const counts = {
+            1: 0, // GK
+            2: 0, // DEF
+            3: 0, // MID
+            4: 0  // FWD
+        };
 
-        // If no regular position is available, check substitute positions
-        if (positionType === "GK") {
-            const subGK = document.querySelector('.player-position.substitute[data-position="GK"]:not(.occupied)');
-            if (subGK && !selectedPlayers.has(subGK.id)) {
-                return subGK;
-            }
-        } else {
-            const subPositions = document.querySelectorAll('.player-position.substitute[data-position="ANY"]:not(.occupied)');
-            for (let position of subPositions) {
-                if (!selectedPlayers.has(position.id)) {
-                    return position;
-                }
-            }
-        }
-        
-        return null;
+        window.selectedPlayers.forEach(player => {
+            counts[player.element_type]++;
+        });
+
+        document.getElementById('gkCount').textContent = `${counts[1]}/2 GK`;
+        document.getElementById('defCount').textContent = `${counts[2]}/5 DEF`;
+        document.getElementById('midCount').textContent = `${counts[3]}/5 MID`;
+        document.getElementById('fwdCount').textContent = `${counts[4]}/3 FWD`;
+
+        // Update pitch display
+        updatePitchDisplay();
     }
 
     function calculateTeamStats() {
@@ -261,7 +460,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'FWD': 0
         };
 
-        selectedPlayers.forEach((player) => {
+        window.selectedPlayers.forEach((player) => {
             // Calculate total value
             totalValue += player.price;
 
@@ -283,7 +482,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function validateTeamSelection(playerToAdd) {
         const stats = calculateTeamStats();
         const playerPosition = positionMap[playerToAdd.element_type];
-        
+
         // Check budget limit
         if (stats.totalValue + playerToAdd.price > BUDGET_LIMIT) {
             alert(`Cannot add player: Team value would exceed £${BUDGET_LIMIT}m`);
@@ -328,8 +527,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Clear any existing content
         const circle = positionElement.querySelector('.player-circle');
         if (circle) {
-            circle.textContent = playerData.web_name[0];
-            
+            circle.textContent = playerData.web_name.charAt(0);
+
             // Remove any existing indicators
             const existingIndicator = circle.querySelector('.captain-indicator, .vice-captain-indicator');
             if (existingIndicator) {
@@ -365,49 +564,40 @@ document.addEventListener('DOMContentLoaded', function() {
         positionElement.classList.add('occupied');
 
         // Store player data
-        selectedPlayers.set(playerData.id, playerData);
-        
-        updateTeamStats();
+        window.selectedPlayers.push(playerData);
+
+        onPlayersChanged();
         return true;
     }
 
     function removePlayerFromTeam(playerData) {
-        let positionId = null;
-        for (let [id, player] of selectedPlayers.entries()) {
-            if (player.id === playerData.id) {
-                positionId = id;
-                break;
+        // Find and clear position
+        document.querySelectorAll('.player-position').forEach(position => {
+            const playerName = position.querySelector('.player-name').textContent;
+            if (playerName === playerData.web_name) {
+                position.classList.remove('occupied');
+                const circle = position.querySelector('.player-circle');
+                circle.textContent = '+';
+
+                // Remove captain/vice-captain indicator if present
+                const captainIndicator = circle.querySelector('.captain-indicator');
+                const viceCaptainIndicator = circle.querySelector('.vice-captain-indicator');
+                if (captainIndicator) captainIndicator.remove();
+                if (viceCaptainIndicator) viceCaptainIndicator.remove();
+
+                position.querySelector('.player-name').textContent = '';
+
+                window.selectedPlayers = window.selectedPlayers.filter(player => player.id !== playerData.id);
+                onPlayersChanged();
             }
-        }
-
-        if (positionId) {
-            const position = document.getElementById(positionId);
-            position.classList.remove('occupied');
-            const circle = position.querySelector('.player-circle');
-            circle.textContent = positionId.replace('position', '');
-            
-            // Remove captain/vice-captain indicator if present
-            const captainIndicator = circle.querySelector('.captain-indicator');
-            const viceCaptainIndicator = circle.querySelector('.vice-captain-indicator');
-            if (captainIndicator) captainIndicator.remove();
-            if (viceCaptainIndicator) viceCaptainIndicator.remove();
-            
-            position.querySelector('.player-name').textContent = '';
-
-            selectedPlayers.delete(positionId);
-            updateTeamStats();
-            updateActionButtons();
-            updateCurrentTeamTable();
-            return true;
-        }
-        return false;
+        });
     }
 
     function updateActionButtons() {
         document.querySelectorAll('.action-btn').forEach(btn => {
             const playerId = parseInt(btn.dataset.playerId);
-            const isInTeam = Array.from(selectedPlayers.values()).some(p => p.id === playerId);
-            
+            const isInTeam = window.selectedPlayers.some(p => p.id === playerId);
+
             btn.innerHTML = isInTeam ? 
                 '<span class="remove-btn">−</span>' : 
                 '<span class="add-btn">+</span>';
@@ -416,125 +606,37 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function updateTeamStats() {
-        const teamStatsDiv = document.querySelector('.team-stats');
-        if (!teamStatsDiv) return;
-
-        const totalValue = Array.from(selectedPlayers.values())
-            .reduce((sum, player) => sum + (player.now_cost || player.value) / 10, 0);
-        
-        const formation = calculateFormation();
-        
-        teamStatsDiv.innerHTML = `
-            <p>Team Value: £${totalValue.toFixed(1)}m</p>
-            <p>Formation: ${formation}</p>
-        `;
-    }
-
     function updateCurrentTeamTable() {
         const currentTeamTableBody = document.getElementById('currentTeamTableBody');
+        if (!currentTeamTableBody) return;
+
         currentTeamTableBody.innerHTML = '';
-
-        // Sort players by position (GK -> DEF -> MID -> FWD)
-        const sortedPlayers = Array.from(selectedPlayers.values()).sort((a, b) => {
-            return positionOrder[a.element_type] - positionOrder[b.element_type];
-        });
-
-        sortedPlayers.forEach((player, index) => {
-            // Create main row
+        
+        window.selectedPlayers.forEach(player => {
             const row = document.createElement('tr');
-            const position = positionMap[player.element_type] || 'Unknown';
-            
-            // Create captain badge if applicable
-            let captainBadge = '';
-            if (player.is_captain) {
-                captainBadge = '<span class="captain-badge captain">C</span>';
-            } else if (player.is_vice_captain) {
-                captainBadge = '<span class="captain-badge vice-captain">V</span>';
-            }
-            
             row.innerHTML = `
+                <td>${player.web_name}</td>
+                <td>${teamMap[player.team] || 'Unknown'}</td>
+                <td>${getPositionName(player.element_type)}</td>
+                <td>£${(player.now_cost / 10).toFixed(1)}m</td>
+                <td>${player.total_points}</td>
+                <td>${player.form}</td>
+                <td>${teamNextFixtures[player.team]?.formatted_fixture || 'No fixture'}</td>
                 <td>
-                    <div class="expand-button">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
-                        </svg>
-                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="removePlayer(${player.id})">
+                        Remove
+                    </button>
                 </td>
-                <td>${position}</td>
-                <td class="captain-cell">${player.web_name || player.name}${captainBadge}</td>
-                <td>${player.team_name || teamMap[player.team] || 'Unknown'}</td>
-                <td>£${((player.now_cost || player.value) / 10).toFixed(1)}m</td>
-                <td>${player.total_points || player.points || 0}</td>
-                <td>${player.form || '0.0'}</td>
             `;
             currentTeamTableBody.appendChild(row);
-
-            // Create details row
-            const detailsRow = document.createElement('tr');
-            detailsRow.className = 'details-row';
-            detailsRow.innerHTML = `
-                <td colspan="7">
-                    <div class="details-content">
-                        <div class="details-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Selected By</div>
-                                <div class="detail-value">${player.selected_by_percent || '0'}%</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Minutes Played</div>
-                                <div class="detail-value">${player.minutes || 0}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Goals Scored</div>
-                                <div class="detail-value">${player.goals_scored || 0}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Assists</div>
-                                <div class="detail-value">${player.assists || 0}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Clean Sheets</div>
-                                <div class="detail-value">${player.clean_sheets || 0}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Bonus Points</div>
-                                <div class="detail-value">${player.bonus || 0}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">ICT Index</div>
-                                <div class="detail-value">${player.ict_index || '0.0'}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Price Change</div>
-                                <div class="detail-value" style="color: ${(player.cost_change_start || 0) >= 0 ? '#4CAF50' : '#f44336'}">
-                                    ${(player.cost_change_start || 0) / 10}m
-                                </div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Next Fixture</div>
-                                <div class="detail-value">${player.next_fixture || 'Unknown'}</div>
-                            </div>
-                        </div>
-                    </div>
-                </td>
-            `;
-            currentTeamTableBody.appendChild(detailsRow);
-
-            // Add click handler to expand button
-            const expandButton = row.querySelector('.expand-button');
-            expandButton.addEventListener('click', () => {
-                expandButton.classList.toggle('expanded');
-                detailsRow.classList.toggle('visible');
-            });
         });
     }
 
     function handleActionClick(e, playerData) {
         e.preventDefault();
         e.stopPropagation();
-        const isInTeam = Array.from(selectedPlayers.values()).some(p => p.id === playerData.id);
-        
+        const isInTeam = window.selectedPlayers.some(p => p.id === playerData.id);
+
         if (isInTeam) {
             removePlayerFromTeam(playerData);
         } else {
@@ -576,7 +678,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        if (selectedPlayers.has(dropTarget.id)) {
+        if (window.selectedPlayers.some(player => player.id === dropTarget.id)) {
             alert('Position already occupied! Remove player first.');
             return;
         }
@@ -595,7 +697,7 @@ document.addEventListener('DOMContentLoaded', function() {
             playerNameElement.classList.add('visible');
         }
 
-        selectedPlayers.set(dropTarget.id, playerData);
+        window.selectedPlayers.push(playerData);
         updateActionButtons();
         updateTeamStats();
         updateCurrentTeamTable();
@@ -609,7 +711,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const circle = position.querySelector('.player-circle');
             circle.addEventListener('click', function(e) {
                 e.stopPropagation();
-                const player = selectedPlayers.get(position.id);
+                const player = window.selectedPlayers.find(p => p.id === position.id);
                 if (player) {
                     if (confirm(`Remove ${player.first_name} ${player.second_name} from your team?`)) {
                         removePlayerFromTeam(player);
@@ -623,7 +725,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const searchInput = document.getElementById('playerSearch');
         searchInput.addEventListener('input', function(e) {
             const searchTerm = e.target.value.toLowerCase();
-            
+
             // Filter all players
             if (searchTerm === '') {
                 filteredPlayers = [...allPlayers];
@@ -632,10 +734,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     `${player.first_name} ${player.second_name}`.toLowerCase().includes(searchTerm)
                 );
             }
-            
+
             // Reset to first page when searching
             currentPage = 1;
-            
+
             // Display filtered results
             displayPlayers(filteredPlayers, currentPage);
         });
@@ -657,354 +759,282 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    async function fetchPlayers() {
-        try {
-            playersTable.classList.add('loading');
-            
-            // Fetch both players and fixtures data
-            const [playersResponse, fixturesResponse] = await Promise.all([
-                fetch('/api/players', {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' }
-                }),
-                fetch('/api/fixtures', {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' }
-                })
-            ]);
-            
-            if (!playersResponse.ok) {
-                throw new Error(`HTTP error! status: ${playersResponse.status}`);
-            }
-            if (!fixturesResponse.ok) {
-                throw new Error(`HTTP error! status: ${fixturesResponse.status}`);
-            }
-            
-            const [playersData, fixturesData] = await Promise.all([
-                playersResponse.json(),
-                fixturesResponse.json()
-            ]);
-            
-            // Update team mapping from API data
-            if (playersData.teams) {
-                teamMap = {};
-                playersData.teams.forEach(team => {
-                    teamMap[team.id] = team.name;
-                });
-            }
-            
-            allPlayers = playersData.elements;
-            
-            // Add team names and next fixture to player data
-            allPlayers = allPlayers.map(player => {
-                const nextFixture = fixturesData.team_next_fixtures[player.team];
-                return {
-                    ...player,
-                    team_name: teamMap[player.team] || 'Unknown',
-                    next_fixture: nextFixture ? nextFixture.formatted_fixture : 'No upcoming fixture'
-                };
-            });
-            
-            if (!Array.isArray(allPlayers) || allPlayers.length === 0) {
-                console.warn('No players data received');
-                return;
-            }
-            
-            // Initialize filtered players with all players
-            filteredPlayers = [...allPlayers];
-            
-            // Display first page
-            displayPlayers(filteredPlayers, currentPage);
-            console.log('Players fetched successfully:', allPlayers.length);
-        } catch (error) {
-            console.error('Error fetching players:', error);
-        } finally {
-            playersTable.classList.remove('loading');
-        }
-    }
-
-    // Manager and gameweek controls
-    const managerIdInput = document.getElementById('managerId');
-    const gameweekInput = document.getElementById('gameweek');
-    const loadDataBtn = document.getElementById('loadData');
-    const loadingSpinner = loadDataBtn.querySelector('.spinner-border');
-
     async function loadAllData() {
-        const managerId = managerIdInput.value.trim();
-        const gameweek = parseInt(gameweekInput.value);
+        const managerId = document.getElementById('managerId').value.trim();
+        const gameweek = parseInt(document.getElementById('gameweek').value);
 
-        // Validate inputs
         if (!managerId) {
             alert('Please enter a manager ID');
             return;
         }
-        if (gameweek < 1 || gameweek > 38) {
-            alert('Please enter a valid gameweek number (1-38)');
-            return;
-        }
 
-        // Show loading state
-        loadDataBtn.disabled = true;
-        loadingSpinner.classList.remove('d-none');
-        const loadingText = loadDataBtn.textContent;
-        loadDataBtn.textContent = 'Loading...';
-
+        const loadButton = document.getElementById('loadData');
+        const spinner = loadButton.querySelector('.spinner-border');
+        
         try {
-            // Make sure we have player data first
-            if (!allPlayers || allPlayers.length === 0) {
+            loadButton.disabled = true;
+            spinner.classList.remove('d-none');
+
+            // First fetch all players if not already loaded
+            if (!allPlayers.length) {
                 await fetchPlayers();
             }
 
-            console.log(`Fetching gameweek data for week ${gameweek}...`);
-            // Load gameweek data
-            const gameweekUrl = `/api/gameweek/${gameweek}?manager_id=${managerId}`;
-            console.log('Gameweek URL:', gameweekUrl);
-            const gameweekResponse = await fetch(gameweekUrl);
-            if (!gameweekResponse.ok) {
-                throw new Error(`HTTP error! status: ${gameweekResponse.status} for ${gameweekUrl}`);
-            }
-            const gameweekData = await gameweekResponse.json();
-            console.log('Gameweek data received:', gameweekData);
-            
-            // Update player stats with gameweek data
-            allPlayers = allPlayers.map(player => {
-                const playerGameweekData = gameweekData.picks?.find(p => p.element === player.id);
-                if (playerGameweekData) {
-                    return {
-                        ...player,
-                        gameweek_points: playerGameweekData.points || 0,
-                        is_captain: playerGameweekData.is_captain || false,
-                        is_vice_captain: playerGameweekData.is_vice_captain || false,
-                        multiplier: playerGameweekData.multiplier || 1,
-                        position_number: playerGameweekData.position
-                    };
-                }
-                return {
-                    ...player,
-                    gameweek_points: 0,
-                    is_captain: false,
-                    is_vice_captain: false,
-                    multiplier: 1,
-                    position_number: null
-                };
-            });
+            // Then load the team data
+            await loadTeamData();
 
-            // Clear existing team
-            selectedPlayers.clear();
-            document.querySelectorAll('.player-position').forEach(position => {
-                const circle = position.querySelector('.player-circle');
-                const nameDisplay = position.querySelector('.player-name');
-                circle.textContent = '+';
-                position.classList.remove('occupied');
-                nameDisplay.textContent = '';
-            });
-
-            // Load manager's team from gameweek data
-            if (gameweekData.picks && Array.isArray(gameweekData.picks)) {
-                console.log('Adding players to team from picks:', gameweekData.picks);
-                for (const pick of gameweekData.picks) {
-                    const player = allPlayers.find(p => p.id === pick.element);
-                    if (player) {
-                        // Add captain and vice-captain status
-                        player.is_captain = pick.is_captain;
-                        player.is_vice_captain = pick.is_vice_captain;
-                        player.position_number = pick.position;
-                        const added = addPlayerToTeam(player);
-                        if (!added) {
-                            console.warn(`Failed to add player ${player.web_name} to team`);
-                        }
-                    } else {
-                        console.warn(`Player with ID ${pick.element} not found in allPlayers`);
-                    }
-                }
-            } else {
-                console.warn('No picks data found in gameweek data:', gameweekData);
-            }
-
-            // Refresh displays
-            filteredPlayers = [...allPlayers];
-            displayPlayers(filteredPlayers, currentPage);
-            updateTeamStats();
-            updateCurrentTeamTable();
-
-            console.log('All data loaded successfully');
         } catch (error) {
             console.error('Error loading data:', error);
-            alert('Error loading data. Please check your inputs and try again.');
+            alert('Failed to load data. Please check your manager ID and try again.');
         } finally {
-            // Reset loading state
-            loadDataBtn.disabled = false;
-            loadingSpinner.classList.add('d-none');
-            loadDataBtn.textContent = loadingText;
+            loadButton.disabled = false;
+            spinner.classList.add('d-none');
         }
     }
 
-    // Event listeners for controls
-    loadDataBtn.addEventListener('click', loadAllData);
+    // Event Listeners
+    document.getElementById('loadData').addEventListener('click', loadAllData);
 
-    // Input validation
-    gameweekInput.addEventListener('input', function() {
-        let value = parseInt(this.value);
-        if (value < 1) this.value = 1;
-        if (value > 38) this.value = 38;
-    });
-
-    // Initialize drag and drop
-    initializeDragAndDrop();
-    
-    // Initialize player positions
-    initializePlayerPositions();
-    
-    // Initialize search functionality
-    initializeSearch();
-    
-    // Automatically fetch players on page load
-    fetchPlayers();
-
-    async function processTeamData(picks, playerData) {
-        const startingEleven = [];
-        const substitutes = [];
-        
-        // Sort picks by position number to ensure proper order
-        picks.sort((a, b) => a.position - b.position);
-        
-        // Process each pick to create player objects
-        picks.forEach(pick => {
-            const playerInfo = playerData[pick.element];
-            const player = {
-                name: playerInfo.web_name,
-                position: positionMap[playerInfo.element_type],
-                position_number: pick.position  // Use the position from FPL API
-            };
-            
-            // First 11 players go to starting eleven, rest to substitutes
-            if (pick.position <= 11) {
-                startingEleven.push(player);
-            } else {
-                substitutes.push(player);
-            }
-        });
-        
-        console.log('Processed starting eleven:', startingEleven);
-        console.log('Processed substitutes:', substitutes);
-        
-        return { startingEleven, substitutes };
-    }
-
-    async function fetchAndDisplayTeam(teamId, gameweek) {
+    async function fetchPlayers() {
         try {
-            const picks = await fetchTeamPicks(teamId, gameweek);
-            const playerData = await fetchPlayerDetails(picks);
-            
-            // Process the data into starting eleven and substitutes
-            const { startingEleven, substitutes } = await processTeamData(picks, playerData);
-            
-            // Display the team with the new formation
-            displayTeam(startingEleven, substitutes);
-            
-        } catch (error) {
-            console.error('Error fetching team:', error);
-        }
-    }
-
-    function displayTeam(teamData) {
-        const tableBody = document.getElementById('currentTeamTableBody');
-        tableBody.innerHTML = '';
-
-        if (!teamData || !teamData.picks) {
-            console.error('No team data available');
-            return;
-        }
-
-        // Sort players by position number
-        const picks = teamData.picks.sort((a, b) => a.position - b.position);
-
-        // Track if we've added the substitute divider
-        let substitutesDividerAdded = false;
-
-        picks.forEach(pick => {
-            const player = allPlayers.find(p => p.id === pick.element);
-            if (!player) {
-                console.error(`Player not found for element ${pick.element}`);
-                return;
+            const response = await fetch('http://localhost:3000/api/bootstrap-static');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-
-            // Add substitute divider before the first substitute
-            if (!substitutesDividerAdded && pick.position > 11) {
-                const dividerRow = document.createElement('tr');
-                dividerRow.className = 'substitute-divider';
-                dividerRow.innerHTML = `
-                    <td colspan="7" class="substitute-label">
-                        <span>Substitutes</span>
-                    </td>
-                `;
-                tableBody.appendChild(dividerRow);
-                substitutesDividerAdded = true;
-            }
-
-            const row = document.createElement('tr');
-            row.className = pick.position > 11 ? 'substitute-player' : 'starting-player';
+            const data = await response.json();
             
-            row.innerHTML = `
-                <td>${pick.position}</td>
-                <td>${positionMap[player.element_type]}</td>
-                <td>${player.web_name}${pick.is_captain ? ' (C)' : ''}${pick.is_vice_captain ? ' (V)' : ''}</td>
-                <td>${teamMap[player.team]}</td>
-                <td>£${(player.now_cost / 10).toFixed(1)}m</td>
-                <td>${player.event_points}</td>
-                <td>${player.form}</td>
-            `;
+            // Store all players
+            allPlayers = data.elements;
             
-            tableBody.appendChild(row);
-            
-            // Also update the player on the pitch
-            addPlayerToTeam({
-                ...player,
-                position_number: pick.position,
-                is_captain: pick.is_captain,
-                is_vice_captain: pick.is_vice_captain
+            // Create team mapping
+            data.teams.forEach(team => {
+                teamMap[team.id] = team;
             });
-        });
 
-        updateTeamStats();
-    }
+            // Add additional data to players
+            allPlayers = allPlayers.map(player => ({
+                ...player,
+                team_name: teamMap[player.team]?.name || 'Unknown',
+                price: (player.now_cost / 10).toFixed(1),
+                form: parseFloat(player.form).toFixed(1),
+                points_per_game: parseFloat(player.points_per_game).toFixed(1)
+            }));
 
-    function calculateFormation() {
-        const formation = {
-            GK: 0,
-            DEF: 0,
-            MID: 0,
-            FWD: 0
-        };
+            // Display players
+            displayPlayers(allPlayers, currentPage);
+            updateActionButtons();
 
-        // Get first 11 players based on position_number
-        const startingEleven = Array.from(selectedPlayers.values())
-            .filter(p => p.position_number >= 1 && p.position_number <= 11)
-            .sort((a, b) => a.position_number - b.position_number);
-
-        console.log('Formation calculation - Starting eleven:', startingEleven.map(p => ({
-            id: p.id,
-            name: p.web_name,
-            position: positionMap[p.element_type],
-            position_number: p.position_number,
-            element_type: p.element_type,
-            is_captain: p.is_captain
-        })));
-
-        // Count players by position
-        startingEleven.forEach(player => {
-            const pos = positionMap[player.element_type];
-            if (pos) {
-                formation[pos]++;
-            }
-        });
-
-        console.log('Formation counts:', formation);
-
-        // Return formation string (e.g., "3-4-3")
-        if (formation.DEF >= 3 && formation.MID >= 3 && formation.FWD >= 1) {
-            return `${formation.DEF}-${formation.MID}-${formation.FWD}`;
+            // Hide error message if it was shown
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.classList.add('d-none');
+        } catch (error) {
+            console.error('Error fetching players:', error);
+            // Show error message
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = 'Failed to load players. Please try again.';
+            errorMessage.classList.remove('d-none');
         }
-        return 'Invalid Formation';
     }
+
+    async function loadTeamData() {
+        try {
+            console.log('Cleared selected players');
+
+            // Load gameweek data
+            const managerId = '5602027'; // This should be configurable
+            const gameweek = 16; // This should be dynamic based on current gameweek
+            const response = await fetch(`http://localhost:3000/api/picks/${managerId}/${gameweek}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            console.log('Gameweek data:', data);
+
+            if (data.picks && Array.isArray(data.picks)) {
+                // Clear current team first
+                window.selectedPlayers = [];
+                
+                // Process each pick
+                data.picks.forEach(pick => {
+                    const player = allPlayers.find(p => p.id === pick.element);
+                    if (player) {
+                        const playerData = {
+                            ...player,
+                            is_captain: pick.is_captain,
+                            is_vice_captain: pick.is_vice_captain,
+                            position_number: pick.position,
+                            is_sub: pick.position > 11
+                        };
+                        addPlayerToTeam(playerData);
+                    }
+                });
+            } else {
+                console.error('No picks data found:', data);
+                throw new Error('No team data found');
+            }
+
+            console.log('Final selected players:', window.selectedPlayers);
+            // Update UI
+            onPlayersChanged();
+
+            // Hide error message if it was shown
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.classList.add('d-none');
+        } catch (error) {
+            console.error('Error loading team data:', error);
+            // Show error message
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = 'Failed to load team data. Please try again.';
+            errorMessage.classList.remove('d-none');
+        }
+    }
+
+    // Function to prepare team data for analysis
+    function prepareTeamData() {
+        const players = window.selectedPlayers;
+        const formation = calculateFormation();
+        const teamValue = players.reduce((sum, player) => sum + (player.now_cost / 10), 0);
+
+        return {
+            picks: players.map(player => ({
+                web_name: player.web_name,
+                position: player.position_number,
+                position_type: positionMap[player.element_type],
+                is_captain: player.is_captain,
+                is_vice_captain: player.is_vice_captain,
+                now_cost: player.now_cost,
+                form: player.form,
+                total_points: player.total_points,
+                team: player.team,
+                team_name: teamMap[player.team]
+            })),
+            formation: formation,
+            team_value: teamValue.toFixed(1),
+            timestamp: new Date().toISOString()
+        };
+    }
+
+    async function analyzeTeam() {
+        try {
+            // Show loading state
+            const analyzeButton = document.getElementById('analyzeButton');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            analyzeButton.disabled = true;
+            loadingSpinner.style.display = 'inline-block';
+
+            // Get current team data
+            const teamData = {
+                players: window.selectedPlayers.map(player => ({
+                    id: player.id,
+                    name: player.web_name,
+                    team: player.team,
+                    position: player.element_type,
+                    price: player.now_cost / 10,
+                    total_points: player.total_points,
+                    form: player.form,
+                    next_fixture: teamNextFixtures[player.team]?.formatted_fixture || 'No fixture'
+                }))
+            };
+
+            // Send POST request
+            const response = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(teamData)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            // Display analysis
+            const analysisContainer = document.getElementById('analysisContainer');
+            const analysisContent = document.getElementById('analysisContent');
+            analysisContent.textContent = data.analysis;
+            analysisContainer.style.display = 'block';
+
+        } catch (error) {
+            console.error('Error analyzing team:', error);
+            alert('Failed to analyze team. Please try again.');
+        } finally {
+            // Hide loading state
+            const analyzeButton = document.getElementById('analyzeButton');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            analyzeButton.disabled = false;
+            loadingSpinner.style.display = 'none';
+        }
+    }
+
+    // Enable/disable analyze button based on team selection
+    function updateAnalyzeButton() {
+        const startingEleven = window.selectedPlayers.filter(p => !p.is_sub);
+        const hasFullTeam = startingEleven.length === 11;
+        analyzeTeamBtn.disabled = !hasFullTeam;
+        analyzeTeamBtn.title = hasFullTeam ? 
+            'Get AI analysis of your team' : 
+            'Select exactly 11 starting players to analyze your team';
+    }
+
+    // Add event listener for analyze button
+    document.getElementById('analyzeButton').addEventListener('click', analyzeTeam);
+
+    // Update analyze button when team changes
+    function onPlayersChanged() {
+        updateTeamStats();
+        updateCurrentTeamTable();
+        
+        // Enable analyze button only when we have exactly 11 players
+        const analyzeButton = document.getElementById('analyzeButton');
+        analyzeButton.disabled = window.selectedPlayers.length !== 11;
+    }
+
+    function addPlayer(player) {
+        console.log('Adding player:', player);
+        
+        if (!player) {
+            console.warn('No player provided');
+            return false;
+        }
+
+        if (window.selectedPlayers.some(p => p.id === player.id)) {
+            console.warn('Player already in team:', player.web_name);
+            return false;
+        }
+
+        // Add player to selected players array
+        window.selectedPlayers.push(player);
+        console.log('Added player to selectedPlayers:', player.web_name);
+        console.log('Current selectedPlayers:', window.selectedPlayers);
+
+        // Update UI
+        onPlayersChanged();
+        return true;
+    }
+
+    function removePlayer(playerId) {
+        console.log('Removing player:', playerId);
+        
+        const index = window.selectedPlayers.findIndex(p => p.id === playerId);
+        if (index !== -1) {
+            window.selectedPlayers.splice(index, 1);
+            console.log('Removed player at index:', index);
+            console.log('Current selectedPlayers:', window.selectedPlayers);
+            onPlayersChanged();
+            return true;
+        }
+        
+        console.warn('Player not found:', playerId);
+        return false;
+    }
+
+    initializeDragAndDrop();
+    initializePlayerPositions();
+    initializeSearch();
 });
